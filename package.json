@@ -1,0 +1,25 @@
+{
+  "name": "mcp-arr",
+  "version": "1.0.0",
+  "description": "MCP server for *arr stack (Sonarr, Radarr, Prowlarr) and qBittorrent",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-arr": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "keywords": ["mcp", "sonarr", "radarr", "prowlarr", "qbittorrent", "arr"],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
