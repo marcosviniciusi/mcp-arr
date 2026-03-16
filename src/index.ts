@@ -1,83 +1,152 @@
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import express from "express";
 import { ArrClient } from "./clients/arr-client.js";
 import { QBittorrentClient } from "./clients/qbittorrent-client.js";
+import { NZBGetClient } from "./clients/nzbget-client.js";
+import { EmbyClient } from "./clients/emby-client.js";
 import { registerSonarrTools } from "./tools/sonarr.js";
 import { registerRadarrTools } from "./tools/radarr.js";
 import { registerProwlarrTools } from "./tools/prowlarr.js";
 import { registerQBittorrentTools } from "./tools/qbittorrent.js";
+import { registerNZBGetTools } from "./tools/nzbget.js";
+import { registerEmbyTools } from "./tools/emby.js";
 
 function getEnv(name: string): string | undefined {
   return process.env[name];
 }
 
-function requireEnv(name: string): string {
-  const val = process.env[name];
-  if (!val) throw new Error(`Missing required environment variable: ${name}`);
-  return val;
+function createServer(): McpServer {
+  const server = new McpServer({
+    name: "midia-mcp",
+    version: "1.0.0",
+  });
+
+  // Sonarr
+  const sonarrUrl = getEnv("SONARR_URL");
+  const sonarrApiKey = getEnv("SONARR_API_KEY");
+  if (sonarrUrl && sonarrApiKey) {
+    registerSonarrTools(server, new ArrClient(sonarrUrl, sonarrApiKey));
+    console.error("[midia-mcp] Sonarr enabled:", sonarrUrl);
+  }
+
+  // Radarr
+  const radarrUrl = getEnv("RADARR_URL");
+  const radarrApiKey = getEnv("RADARR_API_KEY");
+  if (radarrUrl && radarrApiKey) {
+    registerRadarrTools(server, new ArrClient(radarrUrl, radarrApiKey));
+    console.error("[midia-mcp] Radarr enabled:", radarrUrl);
+  }
+
+  // Prowlarr
+  const prowlarrUrl = getEnv("PROWLARR_URL");
+  const prowlarrApiKey = getEnv("PROWLARR_API_KEY");
+  if (prowlarrUrl && prowlarrApiKey) {
+    registerProwlarrTools(server, new ArrClient(prowlarrUrl, prowlarrApiKey));
+    console.error("[midia-mcp] Prowlarr enabled:", prowlarrUrl);
+  }
+
+  // qBittorrent
+  const qbtUrl = getEnv("QBITTORRENT_URL");
+  const qbtUsername = getEnv("QBITTORRENT_USERNAME");
+  const qbtPassword = getEnv("QBITTORRENT_PASSWORD");
+  if (qbtUrl && qbtUsername && qbtPassword) {
+    registerQBittorrentTools(server, new QBittorrentClient(qbtUrl, qbtUsername, qbtPassword));
+    console.error("[midia-mcp] qBittorrent enabled:", qbtUrl);
+  }
+
+  // NZBGet
+  const nzbgetUrl = getEnv("NZBGET_URL");
+  const nzbgetUsername = getEnv("NZBGET_USERNAME");
+  const nzbgetPassword = getEnv("NZBGET_PASSWORD");
+  if (nzbgetUrl && nzbgetUsername && nzbgetPassword) {
+    registerNZBGetTools(server, new NZBGetClient(nzbgetUrl, nzbgetUsername, nzbgetPassword));
+    console.error("[midia-mcp] NZBGet enabled:", nzbgetUrl);
+  }
+
+  // Emby
+  const embyUrl = getEnv("EMBY_URL");
+  const embyApiKey = getEnv("EMBY_API_KEY");
+  if (embyUrl && embyApiKey) {
+    registerEmbyTools(server, new EmbyClient(embyUrl, embyApiKey));
+    console.error("[midia-mcp] Emby enabled:", embyUrl);
+  }
+
+  // Warn if nothing configured
+  if (!sonarrUrl && !radarrUrl && !prowlarrUrl && !qbtUrl && !nzbgetUrl && !embyUrl) {
+    console.error(
+      "[midia-mcp] WARNING: No services configured. Set environment variables for at least one service:\n" +
+        "  Sonarr:      SONARR_URL, SONARR_API_KEY\n" +
+        "  Radarr:      RADARR_URL, RADARR_API_KEY\n" +
+        "  Prowlarr:    PROWLARR_URL, PROWLARR_API_KEY\n" +
+        "  qBittorrent: QBITTORRENT_URL, QBITTORRENT_USERNAME, QBITTORRENT_PASSWORD\n" +
+        "  NZBGet:      NZBGET_URL, NZBGET_USERNAME, NZBGET_PASSWORD\n" +
+        "  Emby:        EMBY_URL, EMBY_API_KEY",
+    );
+  }
+
+  return server;
 }
 
-const server = new McpServer({
-  name: "mcp-arr",
-  version: "1.0.0",
-});
-
-// Register Sonarr tools if configured
-const sonarrUrl = getEnv("SONARR_URL");
-const sonarrApiKey = getEnv("SONARR_API_KEY");
-if (sonarrUrl && sonarrApiKey) {
-  const client = new ArrClient(sonarrUrl, sonarrApiKey);
-  registerSonarrTools(server, client);
-  console.error("[mcp-arr] Sonarr enabled:", sonarrUrl);
-}
-
-// Register Radarr tools if configured
-const radarrUrl = getEnv("RADARR_URL");
-const radarrApiKey = getEnv("RADARR_API_KEY");
-if (radarrUrl && radarrApiKey) {
-  const client = new ArrClient(radarrUrl, radarrApiKey);
-  registerRadarrTools(server, client);
-  console.error("[mcp-arr] Radarr enabled:", radarrUrl);
-}
-
-// Register Prowlarr tools if configured
-const prowlarrUrl = getEnv("PROWLARR_URL");
-const prowlarrApiKey = getEnv("PROWLARR_API_KEY");
-if (prowlarrUrl && prowlarrApiKey) {
-  const client = new ArrClient(prowlarrUrl, prowlarrApiKey);
-  registerProwlarrTools(server, client);
-  console.error("[mcp-arr] Prowlarr enabled:", prowlarrUrl);
-}
-
-// Register qBittorrent tools if configured
-const qbtUrl = getEnv("QBITTORRENT_URL");
-const qbtUsername = getEnv("QBITTORRENT_USERNAME");
-const qbtPassword = getEnv("QBITTORRENT_PASSWORD");
-if (qbtUrl && qbtUsername && qbtPassword) {
-  const client = new QBittorrentClient(qbtUrl, qbtUsername, qbtPassword);
-  registerQBittorrentTools(server, client);
-  console.error("[mcp-arr] qBittorrent enabled:", qbtUrl);
-}
-
-// Check that at least one service is configured
-if (!sonarrUrl && !radarrUrl && !prowlarrUrl && !qbtUrl) {
-  console.error(
-    "[mcp-arr] WARNING: No services configured. Set environment variables for at least one service:\n" +
-      "  Sonarr:      SONARR_URL, SONARR_API_KEY\n" +
-      "  Radarr:      RADARR_URL, RADARR_API_KEY\n" +
-      "  Prowlarr:    PROWLARR_URL, PROWLARR_API_KEY\n" +
-      "  qBittorrent: QBITTORRENT_URL, QBITTORRENT_USERNAME, QBITTORRENT_PASSWORD",
-  );
-}
-
-async function main() {
+async function startStdio() {
+  const server = createServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error("[mcp-arr] Server started on stdio");
+  console.error("[midia-mcp] Server started on stdio");
 }
 
-main().catch((err) => {
-  console.error("[mcp-arr] Fatal error:", err);
-  process.exit(1);
-});
+async function startSSE() {
+  const port = parseInt(getEnv("PORT") || "3000", 10);
+  const app = express();
+
+  // Track active transports for cleanup
+  const transports = new Map<string, SSEServerTransport>();
+
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok", name: "midia-mcp", version: "1.0.0" });
+  });
+
+  app.get("/sse", async (req, res) => {
+    const server = createServer();
+    const transport = new SSEServerTransport("/messages", res);
+    transports.set(transport.sessionId, transport);
+
+    res.on("close", () => {
+      transports.delete(transport.sessionId);
+    });
+
+    await server.connect(transport);
+  });
+
+  app.post("/messages", async (req, res) => {
+    const sessionId = req.query.sessionId as string;
+    const transport = transports.get(sessionId);
+    if (!transport) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+    await transport.handlePostMessage(req, res);
+  });
+
+  app.listen(port, "0.0.0.0", () => {
+    console.error(`[midia-mcp] SSE server listening on http://0.0.0.0:${port}`);
+    console.error(`[midia-mcp] SSE endpoint: http://0.0.0.0:${port}/sse`);
+    console.error(`[midia-mcp] Health check: http://0.0.0.0:${port}/health`);
+  });
+}
+
+const mode = getEnv("TRANSPORT") || "stdio";
+
+if (mode === "sse") {
+  startSSE().catch((err) => {
+    console.error("[midia-mcp] Fatal error:", err);
+    process.exit(1);
+  });
+} else {
+  startStdio().catch((err) => {
+    console.error("[midia-mcp] Fatal error:", err);
+    process.exit(1);
+  });
+}

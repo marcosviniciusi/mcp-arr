@@ -1,23 +1,35 @@
 {
-  "name": "mcp-arr",
-  "version": "1.0.0",
-  "description": "MCP server for *arr stack (Sonarr, Radarr, Prowlarr) and qBittorrent",
+  "name": "midia-mcp",
+  "version": "2.0.0",
+  "description": "MCP server for media stack: Sonarr, Radarr, Prowlarr, qBittorrent, NZBGet, Emby",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "mcp-arr": "dist/index.js"
+    "midia-mcp": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts"
   },
-  "keywords": ["mcp", "sonarr", "radarr", "prowlarr", "qbittorrent", "arr"],
+  "keywords": [
+    "mcp",
+    "sonarr",
+    "radarr",
+    "prowlarr",
+    "qbittorrent",
+    "nzbget",
+    "emby",
+    "arr",
+    "media"
+  ],
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.12.1"
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "express": "^5.2.1"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/node": "^22.15.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"

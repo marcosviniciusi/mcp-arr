@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: midia-mcp-config
+  namespace: ia-mcp
+  labels:
+    app.kubernetes.io/name: midia-mcp
+data:
+  TRANSPORT: "sse"
+  PORT: "3000"
+  # Service URLs - adjust to your cluster/network
+  SONARR_URL: "http://sonarr.media.svc.cluster.local:8989"
+  RADARR_URL: "http://radarr.media.svc.cluster.local:7878"
+  PROWLARR_URL: "http://prowlarr.media.svc.cluster.local:9696"
+  QBITTORRENT_URL: "http://qbittorrent.media.svc.cluster.local:8080"
+  NZBGET_URL: "http://nzbget.media.svc.cluster.local:6789"
+  EMBY_URL: "http://emby.media.svc.cluster.local:8096"

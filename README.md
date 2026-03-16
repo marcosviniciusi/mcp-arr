@@ -1,17 +1,19 @@
-# mcp-arr
+# midia-mcp
 
-MCP (Model Context Protocol) server for managing your media stack:
+MCP (Model Context Protocol) server for managing your complete media stack:
 
 - **Sonarr** - TV series management
 - **Radarr** - Movie management
 - **Prowlarr** - Indexer management & search
 - **qBittorrent** - Torrent client
+- **NZBGet** - Usenet download client
+- **Emby** - Media server
 
-Each service is optional — configure only the ones you use.
+Supports **stdio** (local) and **SSE** (remote/K8s) transports. Each service is optional.
 
 ## Setup
 
-### Install
+### Install & Build
 
 ```bash
 npm install
@@ -20,12 +22,12 @@ npm run build
 
 ### Environment Variables
 
-Set the variables for each service you want to enable:
-
 | Variable | Description |
 |---|---|
+| `TRANSPORT` | `stdio` (default) or `sse` |
+| `PORT` | HTTP port for SSE mode (default: `3000`) |
 | `SONARR_URL` | Sonarr base URL (e.g. `http://localhost:8989`) |
-| `SONARR_API_KEY` | Sonarr API key (Settings > General) |
+| `SONARR_API_KEY` | Sonarr API key |
 | `RADARR_URL` | Radarr base URL (e.g. `http://localhost:7878`) |
 | `RADARR_API_KEY` | Radarr API key |
 | `PROWLARR_URL` | Prowlarr base URL (e.g. `http://localhost:9696`) |
@@ -33,32 +35,113 @@ Set the variables for each service you want to enable:
 | `QBITTORRENT_URL` | qBittorrent Web UI URL (e.g. `http://localhost:8080`) |
 | `QBITTORRENT_USERNAME` | qBittorrent username |
 | `QBITTORRENT_PASSWORD` | qBittorrent password |
+| `NZBGET_URL` | NZBGet URL (e.g. `http://localhost:6789`) |
+| `NZBGET_USERNAME` | NZBGet username |
+| `NZBGET_PASSWORD` | NZBGet password |
+| `EMBY_URL` | Emby URL (e.g. `http://localhost:8096`) |
+| `EMBY_API_KEY` | Emby API key |
 
-### Claude Desktop Configuration
+## Usage
 
-Add to your `claude_desktop_config.json`:
+### Local (stdio) - Claude Desktop
 
 ```json
 {
   "mcpServers": {
-    "mcp-arr": {
+    "midia-mcp": {
       "command": "node",
-      "args": ["/path/to/mcp-arr/dist/index.js"],
+      "args": ["/path/to/midia-mcp/dist/index.js"],
       "env": {
         "SONARR_URL": "http://localhost:8989",
-        "SONARR_API_KEY": "your-sonarr-api-key",
+        "SONARR_API_KEY": "your-key",
         "RADARR_URL": "http://localhost:7878",
-        "RADARR_API_KEY": "your-radarr-api-key",
-        "PROWLARR_URL": "http://localhost:9696",
-        "PROWLARR_API_KEY": "your-prowlarr-api-key",
-        "QBITTORRENT_URL": "http://localhost:8080",
-        "QBITTORRENT_USERNAME": "admin",
-        "QBITTORRENT_PASSWORD": "adminadmin"
+        "RADARR_API_KEY": "your-key",
+        "EMBY_URL": "http://localhost:8096",
+        "EMBY_API_KEY": "your-key"
       }
     }
   }
 }
 ```
+
+### Remote (SSE) - Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "midia-mcp": {
+      "url": "https://midia-mcp.your-domain.com/sse"
+    }
+  }
+}
+```
+
+## Kubernetes Deployment
+
+The project includes Kustomize manifests for deploying to K8s.
+
+### Structure
+
+```
+k8s/
+├── base/
+│   ├── kustomization.yaml
+│   ├── namespace.yaml        # Namespace: ia-mcp
+│   ├── secret.yaml           # API keys & credentials
+│   ├── configmap.yaml        # Service URLs & config
+│   ├── deployment.yaml       # midia-mcp deployment
+│   ├── service.yaml          # ClusterIP service
+│   └── ingress.yaml          # Ingress with SSE support
+└── overlays/
+    └── production/
+        └── kustomization.yaml  # Image, replicas, domain overrides
+```
+
+### Deploy
+
+1. **Build and push the Docker image:**
+
+```bash
+docker build -t your-registry.com/midia-mcp:latest .
+docker push your-registry.com/midia-mcp:latest
+```
+
+2. **Edit secrets and config:**
+
+```bash
+# Edit the secrets (API keys, passwords)
+vim k8s/base/secret.yaml
+
+# Edit the configmap (service URLs for your cluster)
+vim k8s/base/configmap.yaml
+
+# Edit the production overlay (image registry, domain)
+vim k8s/overlays/production/kustomization.yaml
+```
+
+3. **Apply with Kustomize:**
+
+```bash
+# Preview
+kubectl kustomize k8s/overlays/production
+
+# Apply
+kubectl apply -k k8s/overlays/production
+```
+
+4. **Verify:**
+
+```bash
+kubectl -n ia-mcp get pods
+kubectl -n ia-mcp logs -f deployment/midia-mcp
+```
+
+### Security Notes
+
+- The Ingress is configured with HTTPS/TLS — use cert-manager for Let's Encrypt
+- The pod runs as non-root with read-only filesystem
+- Consider adding auth (basic auth, OAuth2 proxy) in front of the Ingress since MCP has no built-in auth
+- For production, use a sealed-secrets or external-secrets operator instead of plain Secret manifests
 
 ## Available Tools
 
@@ -122,6 +205,42 @@ Add to your `claude_desktop_config.json`:
 | `qbt_set_torrent_category` | Set torrent category |
 | `qbt_set_speed_limit` | Set speed limits |
 | `qbt_get_app_version` | App version |
+
+### NZBGet (12 tools)
+
+| Tool | Description |
+|---|---|
+| `nzbget_get_status` | Server status (speed, remaining) |
+| `nzbget_get_downloads` | Active downloads queue |
+| `nzbget_get_history` | Download history |
+| `nzbget_add_nzb` | Add NZB by URL |
+| `nzbget_pause_download` | Pause a download |
+| `nzbget_resume_download` | Resume a download |
+| `nzbget_delete_download` | Delete a download |
+| `nzbget_pause_all` | Pause all downloads |
+| `nzbget_resume_all` | Resume all downloads |
+| `nzbget_set_speed_limit` | Set speed limit |
+| `nzbget_get_config` | Server configuration |
+| `nzbget_get_version` | NZBGet version |
+
+### Emby (14 tools)
+
+| Tool | Description |
+|---|---|
+| `emby_get_system_info` | Server system info |
+| `emby_get_libraries` | List media libraries |
+| `emby_search` | Search for media |
+| `emby_get_item` | Get item details |
+| `emby_get_latest_media` | Latest added media |
+| `emby_get_movies` | List movies |
+| `emby_get_series` | List TV series |
+| `emby_get_episodes` | Get episodes for a series |
+| `emby_get_sessions` | Active sessions (who's watching) |
+| `emby_get_activity_log` | Activity log |
+| `emby_get_scheduled_tasks` | Scheduled tasks |
+| `emby_run_scheduled_task` | Run a scheduled task |
+| `emby_refresh_library` | Trigger library refresh |
+| `emby_get_users` | List users |
 
 ## Development
 
