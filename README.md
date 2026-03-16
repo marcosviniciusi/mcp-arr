@@ -26,6 +26,7 @@ npm run build
 |---|---|
 | `TRANSPORT` | `stdio` (default) or `sse` |
 | `PORT` | HTTP port for SSE mode (default: `3000`) |
+| `AUTH_TOKENS` | **Required in SSE mode.** Comma-separated Bearer tokens for authentication |
 | `SONARR_URL` | Sonarr base URL (e.g. `http://localhost:8989`) |
 | `SONARR_API_KEY` | Sonarr API key |
 | `RADARR_URL` | Radarr base URL (e.g. `http://localhost:7878`) |
@@ -70,10 +71,49 @@ npm run build
 {
   "mcpServers": {
     "midia-mcp": {
-      "url": "https://midia-mcp.your-domain.com/sse"
+      "url": "https://midia-mcp.your-domain.com/sse?token=your-secret-token"
     }
   }
 }
+```
+
+## Authentication
+
+In SSE mode, authentication is **mandatory**. The server will refuse to start without `AUTH_TOKENS` configured.
+
+### How it works
+
+- All endpoints are protected except `/health` (for K8s probes)
+- Supports **Bearer token** via `Authorization` header or `?token=` query parameter
+- The `?token=` query param is necessary for SSE because the browser `EventSource` API cannot set custom headers
+- Multiple tokens are supported (comma-separated) for multi-user access or key rotation
+- Uses **timing-safe comparison** to prevent timing attacks
+- Includes **rate limiting** (10 failed attempts per minute per IP)
+- Any undefined route returns 404
+
+### Generating a token
+
+```bash
+# Generate a secure random token
+openssl rand -hex 32
+```
+
+### Token via header (programmatic clients)
+
+```bash
+curl -H "Authorization: Bearer your-token" https://midia-mcp.example.com/sse
+```
+
+### Token via query param (SSE/EventSource)
+
+```
+https://midia-mcp.example.com/sse?token=your-token
+```
+
+### Multiple tokens (key rotation / multi-user)
+
+```bash
+AUTH_TOKENS=token-user-1,token-user-2,token-admin
 ```
 
 ## Kubernetes Deployment
@@ -138,10 +178,12 @@ kubectl -n ia-mcp logs -f deployment/midia-mcp
 
 ### Security Notes
 
+- **Auth is mandatory**: the server won't start without `AUTH_TOKENS` in SSE mode
+- All endpoints except `/health` require a valid Bearer token
 - The Ingress is configured with HTTPS/TLS — use cert-manager for Let's Encrypt
 - The pod runs as non-root with read-only filesystem
-- Consider adding auth (basic auth, OAuth2 proxy) in front of the Ingress since MCP has no built-in auth
-- For production, use a sealed-secrets or external-secrets operator instead of plain Secret manifests
+- Rate limiting blocks IPs after 10 failed auth attempts per minute
+- For production, use sealed-secrets or external-secrets operator instead of plain Secret manifests
 
 ## Available Tools
 

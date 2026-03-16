@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import express from "express";
+import { authMiddleware } from "./auth.js";
 import { ArrClient } from "./clients/arr-client.js";
 import { QBittorrentClient } from "./clients/qbittorrent-client.js";
 import { NZBGetClient } from "./clients/nzbget-client.js";
@@ -101,6 +102,26 @@ async function startSSE() {
   const port = parseInt(getEnv("PORT") || "3000", 10);
   const app = express();
 
+  // Auth is REQUIRED in SSE mode — refuse to start without it
+  const authTokens = getEnv("AUTH_TOKENS");
+  if (!authTokens || authTokens.trim().length === 0) {
+    console.error(
+      "[midia-mcp] FATAL: AUTH_TOKENS is required in SSE mode.\n" +
+        "  Set AUTH_TOKENS with one or more comma-separated Bearer tokens.\n" +
+        "  Example: AUTH_TOKENS=my-secret-token-1,my-secret-token-2",
+    );
+    process.exit(1);
+  }
+
+  const tokens = authTokens.split(",").map((t) => t.trim()).filter(Boolean);
+  app.use(
+    authMiddleware({
+      tokens,
+      publicPaths: new Set(["/health"]),
+    }),
+  );
+  console.error(`[midia-mcp] Auth enabled with ${tokens.length} token(s)`);
+
   // Track active transports for cleanup
   const transports = new Map<string, SSEServerTransport>();
 
@@ -128,6 +149,11 @@ async function startSSE() {
       return;
     }
     await transport.handlePostMessage(req, res);
+  });
+
+  // Catch-all: block any undefined route
+  app.use((_req, res) => {
+    res.status(404).json({ error: "Not found" });
   });
 
   app.listen(port, "0.0.0.0", () => {
