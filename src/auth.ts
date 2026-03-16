@@ -1,25 +1,26 @@
 import type { Request, Response, NextFunction } from "express";
 import { timingSafeEqual } from "crypto";
+import type { TokenEntry } from "./rbac.js";
+
+declare global {
+  namespace Express {
+    interface Request {
+      /** Authenticated token entry — set by authMiddleware */
+      tokenEntry?: TokenEntry;
+    }
+  }
+}
 
 export interface AuthConfig {
-  /** Comma-separated list of valid Bearer tokens */
-  tokens: string[];
-  /** Paths that skip auth (e.g. /health) */
+  tokenEntries: TokenEntry[];
   publicPaths: Set<string>;
 }
 
-/**
- * Timing-safe token comparison to prevent timing attacks.
- */
 function safeCompare(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   return timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
 
-/**
- * Simple in-memory rate limiter per IP.
- * Tracks failed auth attempts and blocks after threshold.
- */
 class RateLimiter {
   private attempts = new Map<string, { count: number; resetAt: number }>();
   private readonly maxAttempts: number;
@@ -58,16 +59,11 @@ class RateLimiter {
 const rateLimiter = new RateLimiter();
 
 /**
- * Express middleware for Bearer token authentication.
- *
- * - Skips auth for public paths (e.g. /health)
- * - Supports multiple tokens (multi-user / rotation)
- * - Uses timing-safe comparison
- * - Rate limits failed attempts per IP
+ * Express middleware for Bearer token authentication with RBAC.
+ * Sets req.tokenEntry on successful auth for downstream use.
  */
 export function authMiddleware(config: AuthConfig) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    // Skip auth for public paths
     if (config.publicPaths.has(req.path)) {
       next();
       return;
@@ -75,13 +71,11 @@ export function authMiddleware(config: AuthConfig) {
 
     const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
 
-    // Rate limit check
     if (rateLimiter.isBlocked(ip)) {
       res.status(429).json({ error: "Too many failed attempts. Try again later." });
       return;
     }
 
-    // Extract token from Authorization header or query param
     let token: string | undefined;
 
     const authHeader = req.headers.authorization;
@@ -89,7 +83,6 @@ export function authMiddleware(config: AuthConfig) {
       token = authHeader.slice(7);
     }
 
-    // Also support ?token= query param (useful for SSE EventSource which can't set headers)
     if (!token && typeof req.query.token === "string") {
       token = req.query.token;
     }
@@ -103,17 +96,17 @@ export function authMiddleware(config: AuthConfig) {
       return;
     }
 
-    // Check against all valid tokens
-    const valid = config.tokens.some((t) => safeCompare(token!, t));
+    // Find matching token entry (timing-safe comparison)
+    const matched = config.tokenEntries.find((entry) => safeCompare(token!, entry.token));
 
-    if (!valid) {
+    if (!matched) {
       rateLimiter.recordFailure(ip);
       res.status(403).json({ error: "Invalid token" });
       return;
     }
 
-    // Auth passed — reset rate limit for this IP
     rateLimiter.reset(ip);
+    req.tokenEntry = matched;
     next();
   };
 }

@@ -4,6 +4,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import express from "express";
 import { authMiddleware } from "./auth.js";
+import { parseTokenConfig } from "./rbac.js";
+import type { TokenEntry } from "./rbac.js";
+import { createGuardedServer, type SessionContext } from "./server-wrapper.js";
+import { initOtelLogger, shutdownOtelLogger, emitAuditLog } from "./logger.js";
 import { ArrClient } from "./clients/arr-client.js";
 import { QBittorrentClient } from "./clients/qbittorrent-client.js";
 import { NZBGetClient } from "./clients/nzbget-client.js";
@@ -19,123 +23,184 @@ function getEnv(name: string): string | undefined {
   return process.env[name];
 }
 
-function createServer(): McpServer {
-  const server = new McpServer({
-    name: "midia-mcp",
-    version: "1.0.0",
-  });
-
-  // Sonarr
+/**
+ * Register all configured service tools on a McpServer instance.
+ */
+function registerAllTools(server: McpServer): void {
   const sonarrUrl = getEnv("SONARR_URL");
   const sonarrApiKey = getEnv("SONARR_API_KEY");
   if (sonarrUrl && sonarrApiKey) {
     registerSonarrTools(server, new ArrClient(sonarrUrl, sonarrApiKey));
-    console.error("[midia-mcp] Sonarr enabled:", sonarrUrl);
   }
 
-  // Radarr
   const radarrUrl = getEnv("RADARR_URL");
   const radarrApiKey = getEnv("RADARR_API_KEY");
   if (radarrUrl && radarrApiKey) {
     registerRadarrTools(server, new ArrClient(radarrUrl, radarrApiKey));
-    console.error("[midia-mcp] Radarr enabled:", radarrUrl);
   }
 
-  // Prowlarr
   const prowlarrUrl = getEnv("PROWLARR_URL");
   const prowlarrApiKey = getEnv("PROWLARR_API_KEY");
   if (prowlarrUrl && prowlarrApiKey) {
     registerProwlarrTools(server, new ArrClient(prowlarrUrl, prowlarrApiKey));
-    console.error("[midia-mcp] Prowlarr enabled:", prowlarrUrl);
   }
 
-  // qBittorrent
   const qbtUrl = getEnv("QBITTORRENT_URL");
   const qbtUsername = getEnv("QBITTORRENT_USERNAME");
   const qbtPassword = getEnv("QBITTORRENT_PASSWORD");
   if (qbtUrl && qbtUsername && qbtPassword) {
     registerQBittorrentTools(server, new QBittorrentClient(qbtUrl, qbtUsername, qbtPassword));
-    console.error("[midia-mcp] qBittorrent enabled:", qbtUrl);
   }
 
-  // NZBGet
   const nzbgetUrl = getEnv("NZBGET_URL");
   const nzbgetUsername = getEnv("NZBGET_USERNAME");
   const nzbgetPassword = getEnv("NZBGET_PASSWORD");
   if (nzbgetUrl && nzbgetUsername && nzbgetPassword) {
     registerNZBGetTools(server, new NZBGetClient(nzbgetUrl, nzbgetUsername, nzbgetPassword));
-    console.error("[midia-mcp] NZBGet enabled:", nzbgetUrl);
   }
 
-  // Emby
   const embyUrl = getEnv("EMBY_URL");
   const embyApiKey = getEnv("EMBY_API_KEY");
   if (embyUrl && embyApiKey) {
     registerEmbyTools(server, new EmbyClient(embyUrl, embyApiKey));
-    console.error("[midia-mcp] Emby enabled:", embyUrl);
   }
-
-  // Warn if nothing configured
-  if (!sonarrUrl && !radarrUrl && !prowlarrUrl && !qbtUrl && !nzbgetUrl && !embyUrl) {
-    console.error(
-      "[midia-mcp] WARNING: No services configured. Set environment variables for at least one service:\n" +
-        "  Sonarr:      SONARR_URL, SONARR_API_KEY\n" +
-        "  Radarr:      RADARR_URL, RADARR_API_KEY\n" +
-        "  Prowlarr:    PROWLARR_URL, PROWLARR_API_KEY\n" +
-        "  qBittorrent: QBITTORRENT_URL, QBITTORRENT_USERNAME, QBITTORRENT_PASSWORD\n" +
-        "  NZBGet:      NZBGET_URL, NZBGET_USERNAME, NZBGET_PASSWORD\n" +
-        "  Emby:        EMBY_URL, EMBY_API_KEY",
-    );
-  }
-
-  return server;
 }
 
+function createBaseServer(): McpServer {
+  return new McpServer({ name: "midia-mcp", version: "2.0.0" });
+}
+
+function logEnabledServices(): void {
+  const services = [
+    ["Sonarr", "SONARR_URL"],
+    ["Radarr", "RADARR_URL"],
+    ["Prowlarr", "PROWLARR_URL"],
+    ["qBittorrent", "QBITTORRENT_URL"],
+    ["NZBGet", "NZBGET_URL"],
+    ["Emby", "EMBY_URL"],
+  ] as const;
+
+  let any = false;
+  for (const [name, envKey] of services) {
+    if (getEnv(envKey)) {
+      console.error(`[midia-mcp] ${name} enabled: ${getEnv(envKey)}`);
+      any = true;
+    }
+  }
+  if (!any) {
+    console.error("[midia-mcp] WARNING: No services configured.");
+  }
+}
+
+// ─── Stdio mode (local, no auth needed) ──────────────────────────
+
 async function startStdio() {
-  const server = createServer();
+  const server = createBaseServer();
+  registerAllTools(server);
+  logEnabledServices();
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error("[midia-mcp] Server started on stdio");
 }
 
+// ─── SSE mode (remote, auth + RBAC + OTel) ──────────────────────
+
 async function startSSE() {
   const port = parseInt(getEnv("PORT") || "3000", 10);
   const app = express();
 
-  // Auth is REQUIRED in SSE mode — refuse to start without it
-  const authTokens = getEnv("AUTH_TOKENS");
-  if (!authTokens || authTokens.trim().length === 0) {
+  // Parse token config (required in SSE mode)
+  const tokensConfigJson = getEnv("AUTH_TOKENS_CONFIG");
+  if (!tokensConfigJson) {
     console.error(
-      "[midia-mcp] FATAL: AUTH_TOKENS is required in SSE mode.\n" +
-        "  Set AUTH_TOKENS with one or more comma-separated Bearer tokens.\n" +
-        "  Example: AUTH_TOKENS=my-secret-token-1,my-secret-token-2",
+      '[midia-mcp] FATAL: AUTH_TOKENS_CONFIG is required in SSE mode.\n' +
+        '  Set AUTH_TOKENS_CONFIG as a JSON array:\n' +
+        '  [{"token":"secret","name":"marcos","role":"admin"},{"token":"abc","name":"guest","role":"viewer"}]\n' +
+        '  Valid roles: admin, manager, viewer',
     );
     process.exit(1);
   }
 
-  const tokens = authTokens.split(",").map((t) => t.trim()).filter(Boolean);
+  let tokenEntries: TokenEntry[];
+  try {
+    tokenEntries = parseTokenConfig(tokensConfigJson);
+  } catch (err) {
+    console.error(`[midia-mcp] FATAL: Invalid AUTH_TOKENS_CONFIG: ${err}`);
+    process.exit(1);
+  }
+
+  // Init OTel logger if configured
+  const otlpEndpoint = getEnv("OTEL_EXPORTER_OTLP_ENDPOINT");
+  if (otlpEndpoint) {
+    initOtelLogger({
+      serviceName: getEnv("OTEL_SERVICE_NAME") || "midia-mcp",
+      serviceVersion: "2.0.0",
+      otlpEndpoint,
+    });
+  } else {
+    console.error("[midia-mcp] OTel disabled (OTEL_EXPORTER_OTLP_ENDPOINT not set)");
+  }
+
+  // Auth middleware
   app.use(
     authMiddleware({
-      tokens,
+      tokenEntries,
       publicPaths: new Set(["/health"]),
     }),
   );
-  console.error(`[midia-mcp] Auth enabled with ${tokens.length} token(s)`);
 
-  // Track active transports for cleanup
+  console.error(`[midia-mcp] Auth enabled with ${tokenEntries.length} token(s):`);
+  for (const entry of tokenEntries) {
+    console.error(`  - ${entry.name} (${entry.role})`);
+  }
+
+  logEnabledServices();
+
+  // Track active transports
   const transports = new Map<string, SSEServerTransport>();
 
   app.get("/health", (_req, res) => {
-    res.json({ status: "ok", name: "midia-mcp", version: "1.0.0" });
+    res.json({ status: "ok", name: "midia-mcp", version: "2.0.0" });
   });
 
   app.get("/sse", async (req, res) => {
-    const server = createServer();
+    const tokenEntry = req.tokenEntry!;
+    const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
+
+    // Create a guarded server for this session (RBAC + audit)
     const transport = new SSEServerTransport("/messages", res);
+
+    const context: SessionContext = {
+      tokenEntry,
+      ip,
+      sessionId: transport.sessionId,
+    };
+
+    const server = createGuardedServer(() => {
+      const s = createBaseServer();
+      registerAllTools(s);
+      return s;
+    }, context);
+
     transports.set(transport.sessionId, transport);
+
+    emitAuditLog({
+      userName: tokenEntry.name,
+      role: tokenEntry.role,
+      tool: "session.connect",
+      permission: "read",
+      granted: true,
+      status: "success",
+      ip,
+      sessionId: transport.sessionId,
+    });
+
+    console.error(`[midia-mcp] Session ${transport.sessionId} opened by ${tokenEntry.name} (${tokenEntry.role}) from ${ip}`);
 
     res.on("close", () => {
       transports.delete(transport.sessionId);
+      console.error(`[midia-mcp] Session ${transport.sessionId} closed (${tokenEntry.name})`);
     });
 
     await server.connect(transport);
@@ -151,17 +216,25 @@ async function startSSE() {
     await transport.handlePostMessage(req, res);
   });
 
-  // Catch-all: block any undefined route
   app.use((_req, res) => {
     res.status(404).json({ error: "Not found" });
   });
 
   app.listen(port, "0.0.0.0", () => {
     console.error(`[midia-mcp] SSE server listening on http://0.0.0.0:${port}`);
-    console.error(`[midia-mcp] SSE endpoint: http://0.0.0.0:${port}/sse`);
-    console.error(`[midia-mcp] Health check: http://0.0.0.0:${port}/health`);
   });
+
+  // Graceful shutdown
+  for (const sig of ["SIGTERM", "SIGINT"] as const) {
+    process.on(sig, async () => {
+      console.error(`[midia-mcp] ${sig} received, shutting down...`);
+      await shutdownOtelLogger();
+      process.exit(0);
+    });
+  }
 }
+
+// ─── Entrypoint ──────────────────────────────────────────────────
 
 const mode = getEnv("TRANSPORT") || "stdio";
 

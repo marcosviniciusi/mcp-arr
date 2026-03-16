@@ -8,7 +8,10 @@ metadata:
 data:
   TRANSPORT: "sse"
   PORT: "3000"
-  # Service URLs - adjust to your cluster/network
+  # OpenTelemetry — logs only, for SigNoz
+  OTEL_SERVICE_NAME: "midia-mcp"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://signoz-otel-collector.observability.svc.cluster.local:4318"
+  # Service URLs — adjust to your cluster/network
   SONARR_URL: "http://sonarr.media.svc.cluster.local:8989"
   RADARR_URL: "http://radarr.media.svc.cluster.local:7878"
   PROWLARR_URL: "http://prowlarr.media.svc.cluster.local:9696"

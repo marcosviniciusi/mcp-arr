@@ -26,7 +26,9 @@ npm run build
 |---|---|
 | `TRANSPORT` | `stdio` (default) or `sse` |
 | `PORT` | HTTP port for SSE mode (default: `3000`) |
-| `AUTH_TOKENS` | **Required in SSE mode.** Comma-separated Bearer tokens for authentication |
+| `AUTH_TOKENS_CONFIG` | **Required in SSE mode.** JSON array of token entries with RBAC roles |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTel collector endpoint for SigNoz (e.g. `http://signoz:4318`) |
+| `OTEL_SERVICE_NAME` | Service name in OTel logs (default: `midia-mcp`) |
 | `SONARR_URL` | Sonarr base URL (e.g. `http://localhost:8989`) |
 | `SONARR_API_KEY` | Sonarr API key |
 | `RADARR_URL` | Radarr base URL (e.g. `http://localhost:7878`) |
@@ -77,44 +79,112 @@ npm run build
 }
 ```
 
-## Authentication
+## Authentication & RBAC
 
-In SSE mode, authentication is **mandatory**. The server will refuse to start without `AUTH_TOKENS` configured.
+In SSE mode, authentication and role-based access control are **mandatory**. The server refuses to start without `AUTH_TOKENS_CONFIG`.
 
-### How it works
+### Token Configuration
 
-- All endpoints are protected except `/health` (for K8s probes)
-- Supports **Bearer token** via `Authorization` header or `?token=` query parameter
-- The `?token=` query param is necessary for SSE because the browser `EventSource` API cannot set custom headers
-- Multiple tokens are supported (comma-separated) for multi-user access or key rotation
-- Uses **timing-safe comparison** to prevent timing attacks
-- Includes **rate limiting** (10 failed attempts per minute per IP)
-- Any undefined route returns 404
+Set `AUTH_TOKENS_CONFIG` as a JSON array:
 
-### Generating a token
-
-```bash
-# Generate a secure random token
-openssl rand -hex 32
+```json
+[
+  {"token": "abc123...", "name": "marcos",  "role": "admin"},
+  {"token": "def456...", "name": "familia", "role": "manager"},
+  {"token": "ghi789...", "name": "guest",   "role": "viewer"}
+]
 ```
 
-### Token via header (programmatic clients)
+Generate tokens with: `openssl rand -hex 32`
+
+### Roles & Permissions
+
+Each tool is automatically classified by its permission level based on its name:
+
+| Role | `read` | `write` | `delete` | Description |
+|---|---|---|---|---|
+| **admin** | yes | yes | yes | Full access to all tools |
+| **manager** | yes | yes | no | Can add/modify content, cannot delete |
+| **viewer** | yes | no | no | Read-only access (list, search, status) |
+
+**Permission mapping:**
+
+| Permission | Tool patterns | Examples |
+|---|---|---|
+| `read` | get, list, search, status, calendar, queue | `sonarr_get_series`, `emby_search`, `qbt_get_torrents` |
+| `write` | add, create, set, pause, resume, refresh, test | `radarr_add_movie`, `qbt_pause_torrents`, `emby_refresh_library` |
+| `delete` | delete, remove | `sonarr_delete_series`, `qbt_delete_torrents` |
+
+If a viewer tries to call `radarr_add_movie`, they get:
+```
+Access denied. Your role "viewer" does not have "write" permission required for "radarr_add_movie".
+```
+
+### Token via header or query param
 
 ```bash
+# Header (programmatic)
 curl -H "Authorization: Bearer your-token" https://midia-mcp.example.com/sse
-```
 
-### Token via query param (SSE/EventSource)
-
-```
+# Query param (SSE/EventSource — can't set headers)
 https://midia-mcp.example.com/sse?token=your-token
 ```
 
-### Multiple tokens (key rotation / multi-user)
+### Security
 
-```bash
-AUTH_TOKENS=token-user-1,token-user-2,token-admin
+- Timing-safe token comparison (prevents timing attacks)
+- Rate limiting: 10 failed auth attempts per minute per IP → 429
+- All endpoints protected except `/health`
+- Catch-all 404 for undefined routes
+
+## Observability (OpenTelemetry → SigNoz)
+
+Every tool call is logged via OTel with structured audit data, sent to SigNoz.
+
+### Setup
+
+Set these environment variables to enable:
+
+| Variable | Description |
+|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP HTTP endpoint (e.g. `http://signoz-otel-collector:4318`) |
+| `OTEL_SERVICE_NAME` | Service name in logs (default: `midia-mcp`) |
+
+If `OTEL_EXPORTER_OTLP_ENDPOINT` is not set, OTel is disabled (server still works, just no log export).
+
+### What gets logged
+
+Every tool call emits a structured log with:
+
+| Attribute | Example |
+|---|---|
+| `audit.user_name` | `marcos` |
+| `audit.role` | `admin` |
+| `audit.tool` | `radarr_add_movie` |
+| `audit.permission` | `write` |
+| `audit.granted` | `true` |
+| `audit.status` | `success` / `error` / `denied` |
+| `audit.duration_ms` | `142` |
+| `audit.ip` | `10.0.1.5` |
+| `audit.session_id` | `abc-123-...` |
+| `audit.error` | (only on failures) |
+
+Session connect/disconnect events are also logged.
+
+### Example log body
+
 ```
+marcos (admin) → radarr_add_movie [success]
+guest (viewer) → sonarr_delete_series [DENIED - requires delete]
+```
+
+### SigNoz Dashboard
+
+In SigNoz, you can query these logs with:
+- Filter by `audit.user_name` to see all actions by a user
+- Filter by `audit.status = denied` to find unauthorized attempts
+- Filter by `audit.tool` to see usage per tool
+- Group by `audit.role` to compare usage patterns
 
 ## Kubernetes Deployment
 
@@ -178,8 +248,9 @@ kubectl -n ia-mcp logs -f deployment/midia-mcp
 
 ### Security Notes
 
-- **Auth is mandatory**: the server won't start without `AUTH_TOKENS` in SSE mode
+- **Auth + RBAC mandatory**: the server won't start without `AUTH_TOKENS_CONFIG` in SSE mode
 - All endpoints except `/health` require a valid Bearer token
+- Granular permissions: admin/manager/viewer roles control what each token can do
 - The Ingress is configured with HTTPS/TLS — use cert-manager for Let's Encrypt
 - The pod runs as non-root with read-only filesystem
 - Rate limiting blocks IPs after 10 failed auth attempts per minute
