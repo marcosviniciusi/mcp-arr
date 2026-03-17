@@ -13,6 +13,7 @@ RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 ENV TRANSPORT=sse
 ENV PORT=3000
+ENV MIDIA_MCP_CONFIG=/etc/midia-mcp/config.yaml
 EXPOSE 3000
 USER node
 CMD ["node", "dist/index.js"]

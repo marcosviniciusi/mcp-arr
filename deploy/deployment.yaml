@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/name: midia-mcp
     app.kubernetes.io/component: mcp-server
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app.kubernetes.io/name: midia-mcp
@@ -20,15 +20,18 @@ spec:
       containers:
         - name: midia-mcp
           image: midia-mcp:latest
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 3000
               protocol: TCP
-          envFrom:
-            - configMapRef:
-                name: midia-mcp-config
-            - secretRef:
-                name: midia-mcp-secrets
+          env:
+            - name: MIDIA_MCP_CONFIG
+              value: /etc/midia-mcp/config.yaml
+          volumeMounts:
+            - name: config
+              mountPath: /etc/midia-mcp
+              readOnly: true
           livenessProbe:
             httpGet:
               path: /health
@@ -43,12 +46,19 @@ spec:
             periodSeconds: 10
           resources:
             requests:
-              cpu: 50m
-              memory: 64Mi
+              cpu: 100m
+              memory: 128Mi
             limits:
-              cpu: 200m
-              memory: 256Mi
+              cpu: 500m
+              memory: 512Mi
           securityContext:
             runAsNonRoot: true
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
+      volumes:
+        - name: config
+          secret:
+            secretName: midia-mcp-config
+            items:
+              - key: config.yaml
+                path: config.yaml

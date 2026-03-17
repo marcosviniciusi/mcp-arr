@@ -1,7 +1,7 @@
 {
   "name": "midia-mcp",
   "version": "2.0.0",
-  "description": "MCP server for media stack: Sonarr, Radarr, Prowlarr, qBittorrent, NZBGet, Emby",
+  "description": "MCP server for media stack: Jellyseerr, Sonarr, Radarr, Prowlarr, qBittorrent, NZBGet, Emby",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -14,6 +14,7 @@
   },
   "keywords": [
     "mcp",
+    "jellyseerr",
     "sonarr",
     "radarr",
     "prowlarr",
@@ -31,10 +32,12 @@
     "@opentelemetry/resources": "^2.6.0",
     "@opentelemetry/sdk-logs": "^0.213.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "js-yaml": "^4.1.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.15.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0"

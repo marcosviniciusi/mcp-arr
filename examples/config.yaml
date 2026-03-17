@@ -1,0 +1,138 @@
+# ============================================================================
+# midia-mcp — Example Configuration
+# ============================================================================
+# Full example with all services and multiple token profiles.
+# Copy and adjust for your setup.
+
+transport: sse
+host: "0.0.0.0"
+port: 3000
+
+# ============================================================================
+# OPENTELEMETRY
+# ============================================================================
+otel:
+  enabled: true
+  endpoint: "http://signoz-otel-collector.observability.svc.cluster.local:4318"
+  service_name: "midia-mcp"
+
+# ============================================================================
+# SERVICES
+# ============================================================================
+services:
+  jellyseerr:
+    url: "http://jellyseerr.media.svc.cluster.local:5055"
+    api_key: "your-jellyseerr-admin-api-key"
+    users:
+      poweruser:
+        email: "poweruser@home.local"
+        password: "poweruser-password"
+      requester:
+        email: "requester@home.local"
+        password: "requester-password"
+
+  sonarr:
+    url: "http://sonarr.media.svc.cluster.local:8989"
+    api_key: "your-sonarr-api-key"
+
+  radarr:
+    url: "http://radarr.media.svc.cluster.local:7878"
+    api_key: "your-radarr-api-key"
+
+  prowlarr:
+    url: "http://prowlarr.media.svc.cluster.local:9696"
+    api_key: "your-prowlarr-api-key"
+
+  qbittorrent:
+    url: "http://qbittorrent.media.svc.cluster.local:8080"
+    username: "admin"
+    password: "your-qbittorrent-password"
+
+  nzbget:
+    url: "http://nzbget.media.svc.cluster.local:6789"
+    username: "nzbget"
+    password: "your-nzbget-password"
+
+  emby:
+    url: "http://emby.media.svc.cluster.local:8096"
+    api_key: "your-emby-api-key"
+
+# ============================================================================
+# AUTH TOKENS
+# ============================================================================
+
+auth_tokens:
+  # ── Admin — full access to everything ──────────────────────────
+  - token: "sk-admin-db515b2439fbeb0a9a66a2508f3fb40a4dc86e560af7f4f5"
+    description: "Platform Admin - full access everywhere"
+    permissions:
+      jellyseerr:
+        actions: ["*"]
+        auth_level: admin
+      sonarr:
+        actions: ["*"]
+      radarr:
+        actions: ["*"]
+      prowlarr:
+        actions: ["*"]
+      qbittorrent:
+        actions: ["*"]
+      nzbget:
+        actions: ["*"]
+      emby:
+        actions: ["*"]
+
+  # ── Power User — request without approval + browse catalog ─────
+  - token: "sk-power-a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6"
+    description: "Power User - request without approval"
+    permissions:
+      jellyseerr:
+        actions: ["search", "request", "get_requests", "get_request_by_id", "get_media", "get_status"]
+        auth_level: poweruser
+      emby:
+        actions: ["search", "get_movies", "get_series", "get_libraries", "get_latest_media", "get_episodes"]
+
+  # ── Regular User — request with approval needed ────────────────
+  - token: "sk-user-f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1f6e5d4c3b2a1"
+    description: "Regular User - requests need approval"
+    permissions:
+      jellyseerr:
+        actions: ["search", "request", "get_requests"]
+        auth_level: requester
+      emby:
+        actions: ["search", "get_movies", "get_series", "get_libraries"]
+
+  # ── Monitoring — read-only across all backend services ─────────
+  - token: "sk-mon-1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d5e6f"
+    description: "Monitoring - read-only everywhere"
+    permissions:
+      sonarr:
+        actions: ["get_series", "get_calendar", "get_queue", "get_system_status", "get_quality_profiles"]
+      radarr:
+        actions: ["get_movies", "get_calendar", "get_queue", "get_system_status", "get_quality_profiles"]
+      prowlarr:
+        actions: ["get_indexers", "get_indexer_stats", "get_system_status"]
+      qbittorrent:
+        actions: ["get_torrents", "get_transfer_info", "get_categories", "get_app_version"]
+      nzbget:
+        actions: ["get_status", "get_downloads", "get_history", "get_version"]
+      emby:
+        actions: ["get_system_info", "get_sessions", "get_activity_log", "get_users"]
+
+  # ── Sonarr Manager — full Sonarr + read Prowlarr ───────────────
+  - token: "sk-sonarr-aaaa1111bbbb2222cccc3333dddd4444eeee5555ffff6666"
+    description: "Sonarr Manager"
+    permissions:
+      sonarr:
+        actions: ["*"]
+      prowlarr:
+        actions: ["get_indexers", "search", "get_system_status"]
+
+  # ── Download Manager — manage torrents and usenet ──────────────
+  - token: "sk-dl-7777888899990000aaaa1111bbbb2222cccc3333dddd4444"
+    description: "Download Manager"
+    permissions:
+      qbittorrent:
+        actions: ["*"]
+      nzbget:
+        actions: ["*"]

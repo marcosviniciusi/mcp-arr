@@ -1,6 +1,6 @@
 /**
  * OpenTelemetry Log-only setup for SigNoz.
- * Sends structured logs via OTLP HTTP exporter.
+ * Sends structured audit logs via OTLP HTTP exporter.
  */
 import { logs, SeverityNumber } from "@opentelemetry/api-logs";
 import { LoggerProvider, SimpleLogRecordProcessor } from "@opentelemetry/sdk-logs";
@@ -11,12 +11,18 @@ import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from "@opentelemetry/semantic
 let loggerProvider: LoggerProvider | null = null;
 
 export interface OtelConfig {
+  enabled: boolean;
   serviceName: string;
   serviceVersion: string;
   otlpEndpoint: string;
 }
 
 export function initOtelLogger(config: OtelConfig): void {
+  if (!config.enabled || !config.otlpEndpoint) {
+    console.error("[midia-mcp] OTel disabled");
+    return;
+  }
+
   const resource = resourceFromAttributes({
     [ATTR_SERVICE_NAME]: config.serviceName,
     [ATTR_SERVICE_VERSION]: config.serviceVersion,
@@ -32,7 +38,6 @@ export function initOtelLogger(config: OtelConfig): void {
   });
 
   logs.setGlobalLoggerProvider(loggerProvider);
-
   console.error(`[midia-mcp] OTel logs enabled → ${config.otlpEndpoint}`);
 }
 
@@ -43,38 +48,58 @@ export async function shutdownOtelLogger(): Promise<void> {
 }
 
 export interface AuditLogEntry {
-  userName: string;
-  role: string;
+  /** Token description (never the token itself) */
+  tokenDescription: string;
+  /** Truncated SHA256 hash of the token */
+  tokenHash: string;
+  /** App being accessed */
+  app: string;
+  /** Action being performed */
+  action: string;
+  /** Full tool name */
   tool: string;
-  permission: string;
+  /** Whether access was granted */
   granted: boolean;
+  /** Execution result */
   status: "success" | "error" | "denied";
+  /** Duration in ms */
   durationMs?: number;
+  /** Error message if failed */
   error?: string;
+  /** Client IP */
   ip?: string;
+  /** MCP session ID */
   sessionId?: string;
+}
+
+/**
+ * Create a truncated SHA256 hash of a token (12 chars).
+ * The real token never appears in logs.
+ */
+export function hashToken(token: string): string {
+  const { createHash } = require("crypto") as typeof import("crypto");
+  return createHash("sha256").update(token).digest("hex").slice(0, 12);
 }
 
 export function emitAuditLog(entry: AuditLogEntry): void {
   const logger = logs.getLogger("midia-mcp-audit");
 
-  const severity = entry.granted
-    ? SeverityNumber.INFO
-    : SeverityNumber.WARN;
+  const severity = entry.granted ? SeverityNumber.INFO : SeverityNumber.WARN;
 
   const body = entry.granted
-    ? `${entry.userName} (${entry.role}) → ${entry.tool} [${entry.status}]`
-    : `${entry.userName} (${entry.role}) → ${entry.tool} [DENIED - requires ${entry.permission}]`;
+    ? `${entry.tokenDescription} → ${entry.app}.${entry.action} [${entry.status}]`
+    : `${entry.tokenDescription} → ${entry.app}.${entry.action} [DENIED]`;
 
   logger.emit({
     severityNumber: severity,
     severityText: entry.granted ? "INFO" : "WARN",
     body,
     attributes: {
-      "audit.user_name": entry.userName,
-      "audit.role": entry.role,
+      "audit.token_description": entry.tokenDescription,
+      "audit.token_hash": entry.tokenHash,
+      "audit.app": entry.app,
+      "audit.action": entry.action,
       "audit.tool": entry.tool,
-      "audit.permission": entry.permission,
       "audit.granted": entry.granted,
       "audit.status": entry.status,
       ...(entry.durationMs !== undefined && { "audit.duration_ms": entry.durationMs }),

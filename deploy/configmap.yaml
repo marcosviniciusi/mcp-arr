@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: midia-mcp-config
+  namespace: ia-mcp
+  labels:
+    app.kubernetes.io/name: midia-mcp
+data:
+  # Non-sensitive config only. Secrets go in SealedSecrets.
+  # The main config.yaml (with credentials) is mounted from a Secret volume.
+  MIDIA_MCP_CONFIG: "/etc/midia-mcp/config.yaml"

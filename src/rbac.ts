@@ -1,87 +1,83 @@
 /**
- * RBAC — Role-Based Access Control for MCP tools.
+ * RBAC — Per-app, per-action permission system.
  *
- * Each tool is classified by permission level (read/write/delete).
- * Each token maps to a role, and each role has allowed permission levels.
+ * Each token defines which apps it can access and which actions
+ * within each app are allowed. Inspired by mcp-k8s permission model.
  */
 
-export type Permission = "read" | "write" | "delete";
-
-export type Role = "admin" | "manager" | "viewer";
+export interface AppPermission {
+  actions: string[];
+  /** Jellyseerr-specific: which auth context to use (admin | poweruser | requester) */
+  auth_level?: string;
+}
 
 export interface TokenEntry {
   token: string;
-  name: string;
-  role: Role;
+  description: string;
+  permissions: Record<string, AppPermission>;
 }
 
-/** Role → allowed permissions */
-const ROLE_PERMISSIONS: Record<Role, Set<Permission>> = {
-  admin: new Set(["read", "write", "delete"]),
-  manager: new Set(["read", "write"]),
-  viewer: new Set(["read"]),
+/** Tool name prefix → canonical app name mapping */
+const PREFIX_TO_APP: Record<string, string> = {
+  qbt: "qbittorrent",
 };
 
 /**
- * Tool name → required permission.
- * Convention-based: tool names containing these keywords map to permissions.
+ * Parse a tool name into app + action.
+ *
+ * "sonarr_get_series"    → { app: "sonarr", action: "get_series" }
+ * "qbt_get_torrents"     → { app: "qbittorrent", action: "get_torrents" }
+ * "jellyseerr_search"    → { app: "jellyseerr", action: "search" }
  */
-const DELETE_KEYWORDS = ["delete", "remove"];
-const WRITE_KEYWORDS = [
-  "add", "create", "set", "pause", "resume", "search_episodes",
-  "search_movie_download", "run_scheduled", "refresh_library",
-  "test_indexer",
-];
+export function parseToolName(toolName: string): { app: string; action: string } {
+  const idx = toolName.indexOf("_");
+  if (idx === -1) return { app: toolName, action: toolName };
 
-export function getToolPermission(toolName: string): Permission {
-  const lower = toolName.toLowerCase();
-  if (DELETE_KEYWORDS.some((kw) => lower.includes(kw))) return "delete";
-  if (WRITE_KEYWORDS.some((kw) => lower.includes(kw))) return "write";
-  return "read";
-}
+  const prefix = toolName.slice(0, idx);
+  const action = toolName.slice(idx + 1);
+  const app = PREFIX_TO_APP[prefix] ?? prefix;
 
-export function roleHasPermission(role: Role, permission: Permission): boolean {
-  return ROLE_PERMISSIONS[role].has(permission);
-}
-
-export function getPermissionsForRole(role: Role): Set<Permission> {
-  return ROLE_PERMISSIONS[role];
+  return { app, action };
 }
 
 /**
- * Parse AUTH_TOKENS_CONFIG JSON env var.
- *
- * Format:
- * [
- *   {"token": "abc123", "name": "marcos", "role": "admin"},
- *   {"token": "def456", "name": "guest",  "role": "viewer"}
- * ]
+ * Check if a token entry has permission for a given app + action.
  */
-export function parseTokenConfig(configJson: string): TokenEntry[] {
-  const entries = JSON.parse(configJson) as TokenEntry[];
+export function hasPermission(entry: TokenEntry, app: string, action: string): boolean {
+  const appPerms = entry.permissions[app];
+  if (!appPerms) return false;
 
+  if (appPerms.actions.includes("*")) return true;
+  return appPerms.actions.includes(action);
+}
+
+/**
+ * Get the Jellyseerr auth_level for a token entry.
+ */
+export function getJellyseerrAuthLevel(entry: TokenEntry): string | undefined {
+  return entry.permissions.jellyseerr?.auth_level;
+}
+
+/**
+ * Validate token entries at startup.
+ */
+export function validateTokenEntries(entries: TokenEntry[]): void {
   for (const entry of entries) {
-    if (!entry.token || !entry.name || !entry.role) {
-      throw new Error(
-        `Invalid token config entry: ${JSON.stringify(entry)}. Required fields: token, name, role`,
-      );
+    if (!entry.token) {
+      throw new Error(`Token entry missing "token" field: ${JSON.stringify(entry)}`);
     }
-    if (!ROLE_PERMISSIONS[entry.role]) {
-      throw new Error(
-        `Invalid role "${entry.role}" for token "${entry.name}". Valid roles: admin, manager, viewer`,
-      );
+    if (!entry.description) {
+      throw new Error(`Token "${entry.token.slice(0, 8)}..." missing "description" field`);
+    }
+    if (!entry.permissions || typeof entry.permissions !== "object") {
+      throw new Error(`Token "${entry.description}" missing "permissions" object`);
+    }
+    for (const [app, perm] of Object.entries(entry.permissions)) {
+      if (!Array.isArray(perm.actions) || perm.actions.length === 0) {
+        throw new Error(
+          `Token "${entry.description}" → app "${app}" must have a non-empty "actions" array`,
+        );
+      }
     }
   }
-
-  return entries;
-}
-
-/**
- * Find the TokenEntry that matches a given token value.
- */
-export function findTokenEntry(
-  entries: TokenEntry[],
-  tokenValue: string,
-): TokenEntry | undefined {
-  return entries.find((e) => e.token === tokenValue);
 }

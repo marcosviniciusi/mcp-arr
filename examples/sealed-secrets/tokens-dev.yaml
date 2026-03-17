@@ -1,0 +1,50 @@
+# ============================================================================
+# midia-mcp — Development Token Config
+# ============================================================================
+# Used with seal-secrets.sh to generate SealedSecrets for dev environment.
+# DO NOT commit this file with real tokens — use kubeseal first.
+
+transport: stdio
+host: "0.0.0.0"
+port: 3000
+
+otel:
+  enabled: false
+
+services:
+  jellyseerr:
+    url: "http://localhost:5055"
+    api_key: "dev-jellyseerr-api-key"
+    users:
+      poweruser:
+        email: "dev-power@local"
+        password: "dev-password"
+      requester:
+        email: "dev-user@local"
+        password: "dev-password"
+
+  sonarr:
+    url: "http://localhost:8989"
+    api_key: "dev-sonarr-key"
+
+  radarr:
+    url: "http://localhost:7878"
+    api_key: "dev-radarr-key"
+
+  emby:
+    url: "http://localhost:8096"
+    api_key: "dev-emby-key"
+
+auth_tokens:
+  - token: "sk-dev-admin-token"
+    description: "Dev Admin"
+    permissions:
+      jellyseerr:
+        actions: ["*"]
+        auth_level: admin
+      sonarr:
+        actions: ["*"]
+      radarr:
+        actions: ["*"]
+      emby:
+        actions: ["*"]

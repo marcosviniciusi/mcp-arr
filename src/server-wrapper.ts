@@ -1,16 +1,10 @@
 /**
- * Wraps McpServer tool registration to add RBAC checks and audit logging.
- *
- * Strategy: each SSE session gets its own McpServer. When creating a server
- * for an authenticated session, we wrap every tool handler to:
- *   1. Check if the user's role allows the tool's permission level
- *   2. Emit an OTel audit log for every call (granted or denied)
- *   3. Measure execution duration
+ * Wraps McpServer tool registration with per-app/action RBAC + audit logging.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { Role, TokenEntry } from "./rbac.js";
-import { getToolPermission, roleHasPermission } from "./rbac.js";
-import { emitAuditLog } from "./logger.js";
+import type { TokenEntry } from "./rbac.js";
+import { parseToolName, hasPermission } from "./rbac.js";
+import { emitAuditLog, hashToken } from "./logger.js";
 
 export interface SessionContext {
   tokenEntry: TokenEntry;
@@ -18,45 +12,32 @@ export interface SessionContext {
   sessionId?: string;
 }
 
-type ToolHandler = (...args: unknown[]) => Promise<{
-  content: { type: string; text: string }[];
-  isError?: boolean;
-}>;
-
-/**
- * Create a tool-registration proxy that wraps each tool handler
- * with RBAC + audit logging for a specific session context.
- */
 export function createGuardedServer(
   baseServerFactory: () => McpServer,
   context: SessionContext,
 ): McpServer {
   const server = baseServerFactory();
   const originalTool = server.tool.bind(server);
+  const tokenHash = hashToken(context.tokenEntry.token);
 
-  // Override the tool method to wrap handlers
   (server as unknown as Record<string, unknown>).tool = function (...args: unknown[]) {
-    // server.tool(name, description, schema, handler)
-    // or server.tool(name, description, handler) for no-schema
     const name = args[0] as string;
-    const permission = getToolPermission(name);
-    const hasAccess = roleHasPermission(context.tokenEntry.role, permission);
+    const { app, action } = parseToolName(name);
+    const granted = hasPermission(context.tokenEntry, app, action);
 
-    // Find the handler (last argument that's a function)
     const handlerIndex = args.findIndex((a) => typeof a === "function");
     if (handlerIndex === -1) {
-      // No handler — just pass through
       return (originalTool as Function).apply(server, args);
     }
 
-    if (!hasAccess) {
-      // Replace handler with a denial response
+    if (!granted) {
       args[handlerIndex] = async () => {
         emitAuditLog({
-          userName: context.tokenEntry.name,
-          role: context.tokenEntry.role,
+          tokenDescription: context.tokenEntry.description,
+          tokenHash,
+          app,
+          action,
           tool: name,
-          permission,
           granted: false,
           status: "denied",
           ip: context.ip,
@@ -66,50 +47,45 @@ export function createGuardedServer(
         return {
           content: [{
             type: "text",
-            text: `Access denied. Your role "${context.tokenEntry.role}" does not have "${permission}" permission required for "${name}".`,
+            text: `Access denied. Token "${context.tokenEntry.description}" does not have permission for ${app}.${action}.`,
           }],
           isError: true,
         };
       };
     } else {
-      // Wrap handler with audit logging
-      const originalHandler = args[handlerIndex] as ToolHandler;
+      const originalHandler = args[handlerIndex] as Function;
       args[handlerIndex] = async (...handlerArgs: unknown[]) => {
         const start = Date.now();
         try {
-          const result = await (originalHandler as Function).apply(null, handlerArgs);
-          const durationMs = Date.now() - start;
-
+          const result = await originalHandler.apply(null, handlerArgs);
           emitAuditLog({
-            userName: context.tokenEntry.name,
-            role: context.tokenEntry.role,
+            tokenDescription: context.tokenEntry.description,
+            tokenHash,
+            app,
+            action,
             tool: name,
-            permission,
             granted: true,
             status: "success",
-            durationMs,
+            durationMs: Date.now() - start,
             ip: context.ip,
             sessionId: context.sessionId,
           });
-
           return result;
         } catch (err) {
-          const durationMs = Date.now() - start;
           const errorMsg = err instanceof Error ? err.message : String(err);
-
           emitAuditLog({
-            userName: context.tokenEntry.name,
-            role: context.tokenEntry.role,
+            tokenDescription: context.tokenEntry.description,
+            tokenHash,
+            app,
+            action,
             tool: name,
-            permission,
             granted: true,
             status: "error",
-            durationMs,
+            durationMs: Date.now() - start,
             error: errorMsg,
             ip: context.ip,
             sessionId: context.sessionId,
           });
-
           return {
             content: [{ type: "text", text: `Error: ${errorMsg}` }],
             isError: true,

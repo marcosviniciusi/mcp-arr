@@ -5,7 +5,6 @@ import type { TokenEntry } from "./rbac.js";
 declare global {
   namespace Express {
     interface Request {
-      /** Authenticated token entry — set by authMiddleware */
       tokenEntry?: TokenEntry;
     }
   }
@@ -23,13 +22,11 @@ function safeCompare(a: string, b: string): boolean {
 
 class RateLimiter {
   private attempts = new Map<string, { count: number; resetAt: number }>();
-  private readonly maxAttempts: number;
-  private readonly windowMs: number;
 
-  constructor(maxAttempts = 10, windowMs = 60_000) {
-    this.maxAttempts = maxAttempts;
-    this.windowMs = windowMs;
-  }
+  constructor(
+    private readonly maxAttempts = 10,
+    private readonly windowMs = 60_000,
+  ) {}
 
   isBlocked(ip: string): boolean {
     const entry = this.attempts.get(ip);
@@ -58,10 +55,6 @@ class RateLimiter {
 
 const rateLimiter = new RateLimiter();
 
-/**
- * Express middleware for Bearer token authentication with RBAC.
- * Sets req.tokenEntry on successful auth for downstream use.
- */
 export function authMiddleware(config: AuthConfig) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (config.publicPaths.has(req.path)) {
@@ -96,7 +89,6 @@ export function authMiddleware(config: AuthConfig) {
       return;
     }
 
-    // Find matching token entry (timing-safe comparison)
     const matched = config.tokenEntries.find((entry) => safeCompare(token!, entry.token));
 
     if (!matched) {

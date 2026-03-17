@@ -4,13 +4,12 @@ kind: Kustomization
 namespace: ia-mcp
 
 commonLabels:
+  app.kubernetes.io/name: midia-mcp
   app.kubernetes.io/part-of: ia-mcp
-  app.kubernetes.io/managed-by: kustomize
 
 resources:
   - namespace.yaml
-  - secret.yaml
   - configmap.yaml
   - deployment.yaml
   - service.yaml
-  - ingress.yaml
+  - sealedsecret-config.yaml
