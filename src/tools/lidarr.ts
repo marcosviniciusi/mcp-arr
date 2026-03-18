@@ -1,0 +1,536 @@
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import { ArrClient } from "../clients/arr-client.js";
+
+export function registerLidarrTools(server: McpServer, client: ArrClient, prefix = "lidarr") {
+  const p = prefix;
+
+  // ── Read Tools ──────────────────────────────────────────────────────
+
+  server.tool(
+    `${p}_get_artists`,
+    `List all artists in ${p} library`,
+    {},
+    async () => {
+      const data = await client.get("/api/v1/artist");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_artist_by_id`,
+    `Get details for a specific artist in ${p}`,
+    { artistId: z.number().describe("Artist ID") },
+    async ({ artistId }) => {
+      const data = await client.get(`/api/v1/artist/${artistId}`);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_albums`,
+    `Get albums, optionally filtered by artist in ${p}`,
+    { artistId: z.number().optional().describe("Filter by artist ID") },
+    async ({ artistId }) => {
+      const params: Record<string, string> = {};
+      if (artistId !== undefined) params.artistId = String(artistId);
+      const data = await client.get("/api/v1/album", params);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_album_by_id`,
+    `Get details for a specific album in ${p}`,
+    { albumId: z.number().describe("Album ID") },
+    async ({ albumId }) => {
+      const data = await client.get(`/api/v1/album/${albumId}`);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_tracks`,
+    `Get tracks for an album in ${p}`,
+    { albumId: z.number().describe("Album ID to get tracks for") },
+    async ({ albumId }) => {
+      const data = await client.get("/api/v1/track", { albumId: String(albumId) });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_calendar`,
+    `Get upcoming album releases from ${p} calendar`,
+    {
+      start: z.string().optional().describe("Start date (ISO 8601)"),
+      end: z.string().optional().describe("End date (ISO 8601)"),
+      unmonitored: z.boolean().optional().describe("Include unmonitored albums"),
+    },
+    async ({ start, end, unmonitored }) => {
+      const params: Record<string, string> = {};
+      if (start) params.start = start;
+      if (end) params.end = end;
+      if (unmonitored !== undefined) params.unmonitored = String(unmonitored);
+      const data = await client.get("/api/v1/calendar", params);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_queue`,
+    `Get current download queue in ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/v1/queue");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_queue_details`,
+    `Get download queue with pagination in ${p}`,
+    {
+      page: z.number().optional().default(1).describe("Page number"),
+      pageSize: z.number().optional().default(20).describe("Page size"),
+      sortKey: z.string().optional().default("timeleft").describe("Sort key (e.g. timeleft, title)"),
+      sortDirection: z.enum(["ascending", "descending"]).optional().default("ascending").describe("Sort direction"),
+      includeUnknownArtistItems: z.boolean().optional().default(false).describe("Include unknown artist items"),
+    },
+    async ({ page, pageSize, sortKey, sortDirection, includeUnknownArtistItems }) => {
+      const params: Record<string, string> = {
+        page: String(page),
+        pageSize: String(pageSize),
+        sortKey,
+        sortDirection,
+        includeUnknownArtistItems: String(includeUnknownArtistItems),
+      };
+      const data = await client.get("/api/v1/queue", params);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_quality_profiles`,
+    `List available quality profiles in ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/v1/qualityprofile");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_metadata_profiles`,
+    `List available metadata profiles in ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/v1/metadataprofile");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_root_folders`,
+    `List configured root folders in ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/v1/rootfolder");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_system_status`,
+    `Get ${p} system status`,
+    {},
+    async () => {
+      const data = await client.get("/api/v1/system/status");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_tags`,
+    `List all tags in ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/v1/tag");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_history`,
+    `Get history with pagination in ${p}`,
+    {
+      page: z.number().optional().default(1).describe("Page number"),
+      pageSize: z.number().optional().default(20).describe("Page size"),
+      sortKey: z.string().optional().default("date").describe("Sort key (e.g. date, title)"),
+      sortDirection: z.enum(["ascending", "descending"]).optional().default("descending").describe("Sort direction"),
+      eventType: z.number().optional().describe("Filter by event type (1=grabbed, 3=imported, 4=failed, etc.)"),
+    },
+    async ({ page, pageSize, sortKey, sortDirection, eventType }) => {
+      const params: Record<string, string> = {
+        page: String(page),
+        pageSize: String(pageSize),
+        sortKey,
+        sortDirection,
+      };
+      if (eventType !== undefined) params.eventType = String(eventType);
+      const data = await client.get("/api/v1/history", params);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_wanted_missing`,
+    `Get missing/wanted albums in ${p}`,
+    {
+      page: z.number().optional().default(1).describe("Page number"),
+      pageSize: z.number().optional().default(20).describe("Page size"),
+      sortKey: z.string().optional().default("releaseDate").describe("Sort key"),
+      sortDirection: z.enum(["ascending", "descending"]).optional().default("descending").describe("Sort direction"),
+      monitored: z.boolean().optional().default(true).describe("Only monitored albums"),
+    },
+    async ({ page, pageSize, sortKey, sortDirection, monitored }) => {
+      const params: Record<string, string> = {
+        page: String(page),
+        pageSize: String(pageSize),
+        sortKey,
+        sortDirection,
+        monitored: String(monitored),
+      };
+      const data = await client.get("/api/v1/wanted/missing", params);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_wanted_cutoff`,
+    `Get cutoff unmet albums in ${p}`,
+    {
+      page: z.number().optional().default(1).describe("Page number"),
+      pageSize: z.number().optional().default(20).describe("Page size"),
+      sortKey: z.string().optional().default("releaseDate").describe("Sort key"),
+      sortDirection: z.enum(["ascending", "descending"]).optional().default("descending").describe("Sort direction"),
+      monitored: z.boolean().optional().default(true).describe("Only monitored albums"),
+    },
+    async ({ page, pageSize, sortKey, sortDirection, monitored }) => {
+      const params: Record<string, string> = {
+        page: String(page),
+        pageSize: String(pageSize),
+        sortKey,
+        sortDirection,
+        monitored: String(monitored),
+      };
+      const data = await client.get("/api/v1/wanted/cutoff", params);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_disk_space`,
+    `Get disk space information from ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/v1/diskspace");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_health`,
+    `Get health check results from ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/v1/health");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_commands`,
+    `Get running commands in ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/v1/command");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_rename_list`,
+    `Preview file renames for an artist in ${p}`,
+    { artistId: z.number().describe("Artist ID to preview renames for") },
+    async ({ artistId }) => {
+      const data = await client.get("/api/v1/rename", { artistId: String(artistId) });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_logs`,
+    `Get log entries from ${p}`,
+    {
+      page: z.number().optional().default(1).describe("Page number"),
+      pageSize: z.number().optional().default(20).describe("Page size"),
+      sortKey: z.string().optional().default("time").describe("Sort key"),
+      sortDirection: z.enum(["ascending", "descending"]).optional().default("descending").describe("Sort direction"),
+      filterKey: z.string().optional().describe("Filter key (e.g. level)"),
+      filterValue: z.string().optional().describe("Filter value (e.g. error, warn, info)"),
+    },
+    async ({ page, pageSize, sortKey, sortDirection, filterKey, filterValue }) => {
+      const params: Record<string, string> = {
+        page: String(page),
+        pageSize: String(pageSize),
+        sortKey,
+        sortDirection,
+      };
+      if (filterKey) params.filterKey = filterKey;
+      if (filterValue) params.filterValue = filterValue;
+      const data = await client.get("/api/v1/log", params);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  // ── Search Tools ────────────────────────────────────────────────────
+
+  server.tool(
+    `${p}_search_artists`,
+    `Search for an artist to add to ${p}`,
+    { term: z.string().describe("Search term (artist name)") },
+    async ({ term }) => {
+      const data = await client.get("/api/v1/artist/lookup", { term });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_search_albums`,
+    `Search for an album in ${p}`,
+    { term: z.string().describe("Search term (album name)") },
+    async ({ term }) => {
+      const data = await client.get("/api/v1/album/lookup", { term });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_search_artist_download`,
+    `Trigger a search/download for an artist's missing albums in ${p}`,
+    { artistId: z.number().describe("Artist ID to search for") },
+    async ({ artistId }) => {
+      const data = await client.post("/api/v1/command", {
+        name: "ArtistSearch",
+        artistId,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_search_album_download`,
+    `Trigger a search/download for specific albums in ${p}`,
+    { albumIds: z.array(z.number()).describe("List of album IDs to search for") },
+    async ({ albumIds }) => {
+      const data = await client.post("/api/v1/command", {
+        name: "AlbumSearch",
+        albumIds,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  // ── Manage Tools ────────────────────────────────────────────────────
+
+  server.tool(
+    `${p}_add_artist`,
+    `Add a new artist to ${p}`,
+    {
+      foreignArtistId: z.string().describe("MusicBrainz artist ID"),
+      artistName: z.string().describe("Artist name"),
+      qualityProfileId: z.number().describe("Quality profile ID"),
+      metadataProfileId: z.number().describe("Metadata profile ID"),
+      rootFolderPath: z.string().describe("Root folder path (e.g. /music)"),
+      monitored: z.boolean().optional().default(true).describe("Monitor the artist"),
+      monitorNewItems: z.enum(["all", "none", "new"]).optional().default("all").describe("How to monitor new items"),
+      searchForMissingAlbums: z.boolean().optional().default(true).describe("Search for missing albums on add"),
+      tags: z.array(z.number()).optional().default([]).describe("Tag IDs to apply"),
+    },
+    async ({ foreignArtistId, artistName, qualityProfileId, metadataProfileId, rootFolderPath, monitored, monitorNewItems, searchForMissingAlbums, tags }) => {
+      const body = {
+        foreignArtistId,
+        artistName,
+        qualityProfileId,
+        metadataProfileId,
+        rootFolderPath,
+        monitored,
+        monitorNewItems,
+        tags,
+        addOptions: { searchForMissingAlbums },
+      };
+      const data = await client.post("/api/v1/artist", body);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_delete_artist`,
+    `Delete an artist from ${p}`,
+    {
+      artistId: z.number().describe("Artist ID to delete"),
+      deleteFiles: z.boolean().optional().default(false).describe("Also delete files on disk"),
+      addImportListExclusion: z.boolean().optional().default(false).describe("Add import list exclusion"),
+    },
+    async ({ artistId, deleteFiles, addImportListExclusion }) => {
+      const params: string[] = [];
+      if (deleteFiles) params.push("deleteFiles=true");
+      if (addImportListExclusion) params.push("addImportListExclusion=true");
+      const query = params.length ? `?${params.join("&")}` : "";
+      await client.delete(`/api/v1/artist/${artistId}${query}`);
+      return { content: [{ type: "text", text: `Artist ${artistId} deleted.` }] };
+    },
+  );
+
+  server.tool(
+    `${p}_update_artist`,
+    `Edit/update an artist in ${p} (PUT). Fetch the artist first, modify fields, and send the full object back.`,
+    {
+      artistId: z.number().describe("Artist ID to update"),
+      monitored: z.boolean().optional().describe("Set monitored status"),
+      qualityProfileId: z.number().optional().describe("Change quality profile ID"),
+      metadataProfileId: z.number().optional().describe("Change metadata profile ID"),
+      tags: z.array(z.number()).optional().describe("Replace tag IDs"),
+      path: z.string().optional().describe("Change artist path"),
+    },
+    async ({ artistId, monitored, qualityProfileId, metadataProfileId, tags, path }) => {
+      const artist = await client.get<Record<string, unknown>>(`/api/v1/artist/${artistId}`);
+      if (monitored !== undefined) artist.monitored = monitored;
+      if (qualityProfileId !== undefined) artist.qualityProfileId = qualityProfileId;
+      if (metadataProfileId !== undefined) artist.metadataProfileId = metadataProfileId;
+      if (tags !== undefined) artist.tags = tags;
+      if (path !== undefined) artist.path = path;
+      const data = await client.put(`/api/v1/artist/${artistId}`, artist);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_update_album`,
+    `Edit/update an album in ${p} (PUT). Useful for monitoring/unmonitoring albums.`,
+    {
+      albumId: z.number().describe("Album ID to update"),
+      monitored: z.boolean().optional().describe("Set monitored status"),
+    },
+    async ({ albumId, monitored }) => {
+      const album = await client.get<Record<string, unknown>>(`/api/v1/album/${albumId}`);
+      if (monitored !== undefined) album.monitored = monitored;
+      const data = await client.put(`/api/v1/album/${albumId}`, album);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_delete_album`,
+    `Delete an album from ${p}`,
+    {
+      albumId: z.number().describe("Album ID to delete"),
+      deleteFiles: z.boolean().optional().default(false).describe("Also delete files on disk"),
+      addImportListExclusion: z.boolean().optional().default(false).describe("Add import list exclusion"),
+    },
+    async ({ albumId, deleteFiles, addImportListExclusion }) => {
+      const params: string[] = [];
+      if (deleteFiles) params.push("deleteFiles=true");
+      if (addImportListExclusion) params.push("addImportListExclusion=true");
+      const query = params.length ? `?${params.join("&")}` : "";
+      await client.delete(`/api/v1/album/${albumId}${query}`);
+      return { content: [{ type: "text", text: `Album ${albumId} deleted.` }] };
+    },
+  );
+
+  server.tool(
+    `${p}_refresh_artist`,
+    `Refresh artist metadata in ${p}`,
+    { artistId: z.number().optional().describe("Artist ID to refresh (omit to refresh all)") },
+    async ({ artistId }) => {
+      const body: Record<string, unknown> = { name: "RefreshArtist" };
+      if (artistId !== undefined) body.artistId = artistId;
+      const data = await client.post("/api/v1/command", body);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_rescan_artist`,
+    `Rescan artist files on disk in ${p}`,
+    { artistId: z.number().optional().describe("Artist ID to rescan (omit to rescan all)") },
+    async ({ artistId }) => {
+      const body: Record<string, unknown> = { name: "RescanFolders" };
+      if (artistId !== undefined) body.artistId = artistId;
+      const data = await client.post("/api/v1/command", body);
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_rename_artist`,
+    `Rename files for an artist in ${p}`,
+    { artistId: z.number().describe("Artist ID to rename files for") },
+    async ({ artistId }) => {
+      const data = await client.post("/api/v1/command", {
+        name: "RenameFiles",
+        artistId,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_add_tag`,
+    `Create a new tag in ${p}`,
+    { label: z.string().describe("Tag label") },
+    async ({ label }) => {
+      const data = await client.post("/api/v1/tag", { label });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_delete_queue_item`,
+    `Remove an item from the download queue in ${p}`,
+    {
+      queueId: z.number().describe("Queue item ID to remove"),
+      removeFromClient: z.boolean().optional().default(true).describe("Remove from download client"),
+      blocklist: z.boolean().optional().default(false).describe("Add release to blocklist"),
+    },
+    async ({ queueId, removeFromClient, blocklist }) => {
+      const params: string[] = [];
+      params.push(`removeFromClient=${removeFromClient}`);
+      params.push(`blocklist=${blocklist}`);
+      const query = `?${params.join("&")}`;
+      await client.delete(`/api/v1/queue/${queueId}${query}`);
+      return { content: [{ type: "text", text: `Queue item ${queueId} removed.` }] };
+    },
+  );
+
+  server.tool(
+    `${p}_create_backup`,
+    `Create a backup of ${p}`,
+    {},
+    async () => {
+      const data = await client.post("/api/v1/command", { name: "Backup" });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_restart_app`,
+    `Restart ${p} application`,
+    {},
+    async () => {
+      const data = await client.post("/api/v1/system/restart");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+}

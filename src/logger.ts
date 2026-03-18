@@ -56,6 +56,8 @@ export interface AuditLogEntry {
   app: string;
   /** Action being performed */
   action: string;
+  /** Action category (e.g. read, manage, search) resolved from ACTION_MAP */
+  actionCategory?: string;
   /** Full tool name */
   tool: string;
   /** Whether access was granted */
@@ -103,6 +105,7 @@ export function emitAuditLog(entry: AuditLogEntry): void {
       "audit.granted": entry.granted,
       "audit.status": entry.status,
       ...(entry.durationMs !== undefined && { "audit.duration_ms": entry.durationMs }),
+      ...(entry.actionCategory && { "audit.action_category": entry.actionCategory }),
       ...(entry.error && { "audit.error": entry.error }),
       ...(entry.ip && { "audit.ip": entry.ip }),
       ...(entry.sessionId && { "audit.session_id": entry.sessionId }),

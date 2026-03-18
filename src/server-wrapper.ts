@@ -4,6 +4,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { TokenEntry } from "./rbac.js";
 import { parseToolName, hasPermission } from "./rbac.js";
+import { getActionCategory } from "./action-map.js";
 import { emitAuditLog, hashToken } from "./logger.js";
 
 export interface SessionContext {
@@ -24,6 +25,7 @@ export function createGuardedServer(
     const name = args[0] as string;
     const { app, action } = parseToolName(name);
     const granted = hasPermission(context.tokenEntry, app, action);
+    const actionCategory = getActionCategory(app, action) ?? undefined;
 
     const handlerIndex = args.findIndex((a) => typeof a === "function");
     if (handlerIndex === -1) {
@@ -37,6 +39,7 @@ export function createGuardedServer(
           tokenHash,
           app,
           action,
+          actionCategory,
           tool: name,
           granted: false,
           status: "denied",
@@ -63,6 +66,7 @@ export function createGuardedServer(
             tokenHash,
             app,
             action,
+            actionCategory,
             tool: name,
             granted: true,
             status: "success",
@@ -78,6 +82,7 @@ export function createGuardedServer(
             tokenHash,
             app,
             action,
+            actionCategory,
             tool: name,
             granted: true,
             status: "error",

@@ -2,3 +2,5 @@ node_modules/
 dist/
 .env
 *.secret.yaml
+tokens.yaml
+tokens-*.yaml

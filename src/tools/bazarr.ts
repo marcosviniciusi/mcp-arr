@@ -1,0 +1,223 @@
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import { BazarrClient } from "../clients/bazarr-client.js";
+
+export function registerBazarrTools(server: McpServer, client: BazarrClient, prefix = "bazarr") {
+  const p = prefix;
+
+  server.tool(
+    `${p}_get_series`,
+    `List all series with subtitle status in ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/series");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_series_by_id`,
+    `Get subtitle details for a specific series in ${p}`,
+    { seriesid: z.number().describe("Sonarr series ID") },
+    async ({ seriesid }) => {
+      const data = await client.get("/api/series", { seriesid: String(seriesid) });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_episodes`,
+    `Get episodes with subtitle info for a series in ${p}`,
+    { seriesid: z.number().describe("Sonarr series ID") },
+    async ({ seriesid }) => {
+      const data = await client.get("/api/episodes", { seriesid: String(seriesid) });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_movies`,
+    `List all movies with subtitle status in ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/movies");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_movie_by_id`,
+    `Get subtitle details for a specific movie in ${p}`,
+    { radarrid: z.number().describe("Radarr movie ID") },
+    async ({ radarrid }) => {
+      const data = await client.get("/api/movies", { radarrid: String(radarrid) });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_wanted_episodes`,
+    `Get episodes with missing subtitles in ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/episodes/wanted");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_wanted_movies`,
+    `Get movies with missing subtitles in ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/movies/wanted");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_search_episode_subtitles`,
+    `Search and download subtitles for an episode in ${p}`,
+    {
+      sonarrEpisodeId: z.number().describe("Sonarr episode ID"),
+      language: z.string().describe("Language code (e.g. 'pt', 'en', 'ja')"),
+      forced: z.boolean().optional().default(false).describe("Search for forced subtitles only"),
+      hi: z.boolean().optional().default(false).describe("Search for hearing impaired subtitles"),
+    },
+    async ({ sonarrEpisodeId, language, forced, hi }) => {
+      const data = await client.post("/api/episodes/subtitles", {
+        sonarrEpisodeId,
+        language,
+        forced,
+        hi,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_search_movie_subtitles`,
+    `Search and download subtitles for a movie in ${p}`,
+    {
+      radarrId: z.number().describe("Radarr movie ID"),
+      language: z.string().describe("Language code (e.g. 'pt', 'en', 'ja')"),
+      forced: z.boolean().optional().default(false).describe("Search for forced subtitles only"),
+      hi: z.boolean().optional().default(false).describe("Search for hearing impaired subtitles"),
+    },
+    async ({ radarrId, language, forced, hi }) => {
+      const data = await client.post("/api/movies/subtitles", {
+        radarrId,
+        language,
+        forced,
+        hi,
+      });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_delete_episode_subtitles`,
+    `Delete subtitles for an episode in ${p}`,
+    {
+      sonarrEpisodeId: z.number().describe("Sonarr episode ID"),
+      language: z.string().describe("Language code"),
+      path: z.string().describe("Subtitle file path"),
+    },
+    async ({ sonarrEpisodeId, language, path: subPath }) => {
+      await client.delete("/api/episodes/subtitles", {
+        sonarrEpisodeId,
+        language,
+        path: subPath,
+      });
+      return { content: [{ type: "text", text: `Subtitle deleted for episode ${sonarrEpisodeId}.` }] };
+    },
+  );
+
+  server.tool(
+    `${p}_delete_movie_subtitles`,
+    `Delete subtitles for a movie in ${p}`,
+    {
+      radarrId: z.number().describe("Radarr movie ID"),
+      language: z.string().describe("Language code"),
+      path: z.string().describe("Subtitle file path"),
+    },
+    async ({ radarrId, language, path: subPath }) => {
+      await client.delete("/api/movies/subtitles", {
+        radarrId,
+        language,
+        path: subPath,
+      });
+      return { content: [{ type: "text", text: `Subtitle deleted for movie ${radarrId}.` }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_episode_history`,
+    `Get subtitle download history for episodes in ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/episodes/history");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_movie_history`,
+    `Get subtitle download history for movies in ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/movies/history");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_providers`,
+    `List configured subtitle providers in ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/providers");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_languages`,
+    `List available subtitle languages in ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/system/languages");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_system_status`,
+    `Get ${p} system status`,
+    {},
+    async () => {
+      const data = await client.get("/api/system/status");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_get_tasks`,
+    `List scheduled tasks in ${p}`,
+    {},
+    async () => {
+      const data = await client.get("/api/system/tasks");
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    `${p}_run_task`,
+    `Run a scheduled task in ${p}`,
+    { taskName: z.string().describe("Task name to run") },
+    async ({ taskName }) => {
+      const data = await client.post("/api/system/tasks", { taskName });
+      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+    },
+  );
+}

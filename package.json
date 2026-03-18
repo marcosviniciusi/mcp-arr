@@ -1,7 +1,7 @@
 {
   "name": "midia-mcp",
-  "version": "2.0.0",
-  "description": "MCP server for media stack: Jellyseerr, Sonarr, Radarr, Prowlarr, qBittorrent, NZBGet, Emby",
+  "version": "3.1.0",
+  "description": "MCP server for media stack: Sonarr, Radarr, Lidarr, Whisparr, Bazarr, Prowlarr, Autobrr, Jellyseerr, Seerr, Emby, Jellyfin, qBittorrent, NZBGet, TMDB, MyAnimeList, Ryot — with multi-instance support",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -22,7 +22,17 @@
     "nzbget",
     "emby",
     "arr",
-    "media"
+    "media",
+    "tmdb",
+    "myanimelist",
+    "ryot",
+    "seerr",
+    "bazarr",
+    "lidarr",
+    "whisparr",
+    "autobrr",
+    "jellyfin",
+    "streamable-http"
   ],
   "license": "MIT",
   "dependencies": {

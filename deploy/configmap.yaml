@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: midia-mcp-config
-  namespace: ia-mcp
+  namespace: mcp-arr
   labels:
     app.kubernetes.io/name: midia-mcp
 data:

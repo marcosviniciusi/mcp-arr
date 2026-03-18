@@ -34,7 +34,7 @@ CERT_FILE=""
 FETCH_CERT=false
 CONTROLLER_NAME="sealed-secrets"
 CONTROLLER_NAMESPACE="kube-system"
-NAMESPACE="ia-mcp"
+NAMESPACE="mcp-arr"
 OUTPUT_DIR="deploy"
 SECRET_NAME="midia-mcp-config"
 

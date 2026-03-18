@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: midia-mcp
-  namespace: ia-mcp
+  namespace: mcp-arr
   labels:
     app.kubernetes.io/name: midia-mcp
     app.kubernetes.io/component: mcp-server
@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: midia-mcp
-          image: midia-mcp:latest
+          image: marcosviniciusi/midia-mcp:v3.1
           imagePullPolicy: Always
           ports:
             - name: http
@@ -53,6 +53,7 @@ spec:
               memory: 512Mi
           securityContext:
             runAsNonRoot: true
+            runAsUser: 1000
             readOnlyRootFilesystem: true
             allowPrivilegeEscalation: false
       volumes:
