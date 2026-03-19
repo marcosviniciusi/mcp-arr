@@ -25,6 +25,7 @@ import {
   type JellyseerrConfig,
 } from "./clients/jellyseerr-client.js";
 import { TmdbClient } from "./clients/tmdb-client.js";
+import { OmdbClient } from "./clients/omdb-client.js";
 import { MalClient } from "./clients/mal-client.js";
 import { RyotClient, createRyotClients, type RyotConfig } from "./clients/ryot-client.js";
 import {
@@ -48,6 +49,7 @@ import { registerTmdbTools } from "./tools/tmdb.js";
 import { registerMalTools } from "./tools/mal.js";
 import { registerRyotTools } from "./tools/ryot.js";
 import { registerSeerrTools } from "./tools/seerr.js";
+import { registerOmdbTools } from "./tools/omdb.js";
 
 const VERSION = "3.1.0";
 
@@ -246,6 +248,12 @@ function registerAllTools(
         if (svc.api_key) {
           const url = svc.url || "https://api.themoviedb.org/3";
           registerTmdbTools(server, new TmdbClient(url, svc.api_key));
+        }
+        break;
+
+      case "omdb":
+        if (svc.api_key) {
+          registerOmdbTools(server, new OmdbClient(svc.api_key));
         }
         break;
 

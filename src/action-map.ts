@@ -198,6 +198,10 @@ export const ACTION_MAP: Record<string, Record<string, string[]>> = {
     manage: ["create_filter", "delete_filter"],
   },
 
+  omdb: {
+    read: ["search", "get_by_id", "get_by_title"],
+  },
+
   jellyfin: {
     read: [
       "get_system_info", "get_libraries", "search", "get_item",
@@ -213,7 +217,7 @@ export const ACTION_MAP: Record<string, Record<string, string[]>> = {
 const SERVICE_TYPES = [
   "sonarr", "radarr", "bazarr", "lidarr", "whisparr", "autobrr",
   "jellyfin", "emby", "prowlarr", "jellyseerr", "seerr",
-  "qbittorrent", "nzbget", "tmdb", "mal", "ryot",
+  "qbittorrent", "nzbget", "tmdb", "mal", "ryot", "omdb",
 ];
 
 /**
