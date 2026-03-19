@@ -21,7 +21,7 @@ export const ACTION_MAP: Record<string, Record<string, string[]>> = {
     ],
     search: ["search_series", "search_episodes", "search_series_download"],
     manage: [
-      "add_series", "delete_series", "update_series", "update_episode",
+      "add_series", "bulk_add", "delete_series", "update_series", "update_episode",
       "delete_episode_file", "monitor_episodes", "refresh_series",
       "rescan_series", "rename_series", "add_tag", "delete_queue_item",
       "clear_blocklist", "create_backup", "restart_app",
@@ -39,7 +39,7 @@ export const ACTION_MAP: Record<string, Record<string, string[]>> = {
     ],
     search: ["search_movies", "search_movie_download"],
     manage: [
-      "add_movie", "delete_movie", "update_movie", "delete_movie_file",
+      "add_movie", "bulk_add", "delete_movie", "update_movie", "delete_movie_file",
       "refresh_movie", "rescan_movie", "rename_movie", "add_tag",
       "delete_queue_item", "clear_blocklist", "add_exclusion",
       "delete_exclusion", "create_backup", "restart_app",

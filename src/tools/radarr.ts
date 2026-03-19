@@ -379,6 +379,48 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
   );
 
   server.tool(
+    `${p}_bulk_add`,
+    `Add multiple movies to ${label} in ONE call. Searches each title, resolves tmdbId, and adds all. Returns results per movie. Use this instead of calling search_movies + add_movie in a loop.`,
+    {
+      titles: z.array(z.string()).describe("List of movie titles to search and add"),
+      searchForMovie: z.boolean().optional().default(true),
+      minimumAvailability: z.enum(["announced", "inCinemas", "released"]).optional().default("released"),
+    },
+    async ({ titles, searchForMovie, minimumAvailability }) => {
+      const [profiles, folders] = await Promise.all([
+        client.get("/api/v3/qualityprofile") as Promise<any[]>,
+        client.get("/api/v3/rootfolder") as Promise<any[]>,
+      ]);
+      const profileId = profiles[0]?.id;
+      const rootPath = folders[0]?.path;
+      if (!profileId || !rootPath) return ok({ error: "No quality profile or root folder configured" });
+
+      const existing: any[] = await client.get("/api/v3/movie");
+      const existingTmdbIds = new Set(existing.map((m: any) => m.tmdbId));
+
+      const results: any[] = [];
+      for (const title of titles) {
+        try {
+          const lookup: any[] = await client.get("/api/v3/movie/lookup", { term: title });
+          const match = lookup[0];
+          if (!match) { results.push({ title, status: "not_found" }); continue; }
+          if (existingTmdbIds.has(match.tmdbId)) { results.push({ title: match.title, tmdbId: match.tmdbId, status: "already_exists" }); continue; }
+
+          await client.post("/api/v3/movie", {
+            tmdbId: match.tmdbId, title: match.title, qualityProfileId: profileId,
+            rootFolderPath: rootPath, monitored: true, minimumAvailability,
+            addOptions: { searchForMovie },
+          });
+          results.push({ title: match.title, tmdbId: match.tmdbId, year: match.year, status: "added" });
+        } catch (e: any) {
+          results.push({ title, status: "error", message: e.message?.slice(0, 100) });
+        }
+      }
+      return ok({ profileUsed: { id: profileId, name: profiles[0]?.name }, rootFolder: rootPath, results });
+    },
+  );
+
+  server.tool(
     `${p}_delete_movie`,
     `Delete a movie from ${p}`,
     {

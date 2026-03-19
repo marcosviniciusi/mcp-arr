@@ -416,6 +416,50 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
   );
 
   server.tool(
+    `${p}_bulk_add`,
+    `Add multiple series to ${label} in ONE call. Searches each title, resolves tvdbId, and adds all. Returns results per series. Use this instead of calling search_series + add_series in a loop.`,
+    {
+      titles: z.array(z.string()).describe("List of series titles to search and add"),
+      seriesType: z.enum(["standard", "daily", "anime"]).optional().default("standard").describe("Series type for all"),
+      searchForMissingEpisodes: z.boolean().optional().default(true),
+    },
+    async ({ titles, seriesType, searchForMissingEpisodes }) => {
+      // Fetch profiles + folders + existing series ONCE
+      const [profiles, folders, existing] = await Promise.all([
+        client.get("/api/v3/qualityprofile") as Promise<any[]>,
+        client.get("/api/v3/rootfolder") as Promise<any[]>,
+        client.get("/api/v3/series") as Promise<any[]>,
+      ]);
+      const profileId = profiles[0]?.id;
+      const rootPath = folders[0]?.path;
+      if (!profileId || !rootPath) return ok({ error: "No quality profile or root folder configured" });
+      const existingTvdbIds = new Set(existing.map((s: any) => s.tvdbId));
+
+      const results: any[] = [];
+      for (const title of titles) {
+        try {
+          const lookup: any[] = await client.get("/api/v3/series/lookup", { term: title });
+          const match = lookup[0];
+          if (!match) { results.push({ title, status: "not_found" }); continue; }
+
+          const alreadyExists = existingTvdbIds.has(match.tvdbId);
+          if (alreadyExists) { results.push({ title: match.title, tvdbId: match.tvdbId, status: "already_exists" }); continue; }
+
+          await client.post("/api/v3/series", {
+            tvdbId: match.tvdbId, title: match.title, qualityProfileId: profileId,
+            rootFolderPath: rootPath, monitored: true, seasonFolder: true,
+            seriesType, addOptions: { searchForMissingEpisodes },
+          });
+          results.push({ title: match.title, tvdbId: match.tvdbId, year: match.year, status: "added" });
+        } catch (e: any) {
+          results.push({ title, status: "error", message: e.message?.slice(0, 100) });
+        }
+      }
+      return ok({ profileUsed: { id: profileId, name: profiles[0]?.name }, rootFolder: rootPath, results });
+    },
+  );
+
+  server.tool(
     `${p}_delete_series`,
     `Delete a series from ${p}`,
     {
