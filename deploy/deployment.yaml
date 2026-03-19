@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
         - name: midia-mcp
-          image: marcosviniciusi/midia-mcp:v3.1
+          image: marcosviniciusi/midia-mcp:v3.2
           imagePullPolicy: Always
           ports:
             - name: http

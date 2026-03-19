@@ -53,7 +53,7 @@ import { registerSeerrTools } from "./tools/seerr.js";
 import { registerOmdbTools } from "./tools/omdb.js";
 import { registerTvdbTools } from "./tools/tvdb.js";
 
-const VERSION = "3.1.0";
+const VERSION = "3.2.0";
 
 // ─── Config types ────────────────────────────────────────────────
 

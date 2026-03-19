@@ -4,18 +4,35 @@ import { TmdbClient } from "../clients/tmdb-client.js";
 
 const slim = (obj: any, keys: string[]) => keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
 
+// Genre ID → name mapping (TMDB standard IDs)
+const GENRE_MAP: Record<number, string> = {
+  28: "Action", 12: "Adventure", 16: "Animation", 35: "Comedy", 80: "Crime",
+  99: "Documentary", 18: "Drama", 10751: "Family", 14: "Fantasy", 36: "History",
+  27: "Horror", 10402: "Music", 9648: "Mystery", 10749: "Romance", 878: "Sci-Fi",
+  10770: "TV Movie", 53: "Thriller", 10752: "War", 37: "Western",
+  // TV-specific
+  10759: "Action & Adventure", 10762: "Kids", 10763: "News", 10764: "Reality",
+  10765: "Sci-Fi & Fantasy", 10766: "Soap", 10767: "Talk", 10768: "War & Politics",
+};
+
+function resolveGenres(ids: number[]): string[] {
+  return ids.map(id => GENRE_MAP[id] ?? String(id));
+}
+
 function slimTmdbResult(item: any): any {
   const mt = item.media_type;
   if (mt === "person" || item.known_for_department) {
     return slim(item, ["id", "name", "known_for_department"]);
   }
   if (mt === "tv" || item.first_air_date !== undefined) {
-    const s = slim(item, ["id", "name", "first_air_date", "vote_average", "original_language", "genre_ids", "popularity"]);
+    const s = slim(item, ["id", "name", "first_air_date", "vote_average", "vote_count", "original_language", "popularity"]);
+    if (Array.isArray(item.genre_ids)) s.genres = resolveGenres(item.genre_ids);
     if (item.media_type) s.media_type = "tv";
     return s;
   }
   // default: movie
-  const s = slim(item, ["id", "title", "release_date", "vote_average", "original_language", "genre_ids", "popularity"]);
+  const s = slim(item, ["id", "title", "release_date", "vote_average", "vote_count", "original_language", "popularity"]);
+  if (Array.isArray(item.genre_ids)) s.genres = resolveGenres(item.genre_ids);
   if (item.media_type) s.media_type = "movie";
   return s;
 }
@@ -262,23 +279,25 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
 
   server.tool(
     "tmdb_discover_movies",
-    "Discover movies by filters (genre, year, rating). Already returns title, vote_average, genre_ids, popularity — do NOT call get_movie_details for each result.",
+    "Discover movies by filters. Returns title, genres (names), vote_average, vote_count, popularity. Use with_keywords for subgenres like cyberpunk (12681), steampunk (4379), dystopia (3801). Common genre IDs: 28=Action, 878=Sci-Fi, 16=Animation, 18=Drama, 53=Thriller. Do NOT call get_movie_details for each result.",
     {
       page: z.number().optional().default(1),
-      language: z.string().optional().default("en-US"),
-      sort_by: z.string().optional().default("popularity.desc").describe("Sort (e.g. popularity.desc, vote_average.desc)"),
-      with_genres: z.string().optional().describe("Genre IDs comma-separated"),
+      language: z.string().optional().default("pt-BR"),
+      sort_by: z.string().optional().default("popularity.desc").describe("Sort: popularity.desc, vote_average.desc, primary_release_date.desc"),
+      with_genres: z.string().optional().describe("Genre IDs comma-separated (878=Sci-Fi, 28=Action, 16=Animation)"),
+      with_keywords: z.string().optional().describe("Keyword IDs comma-separated (12681=cyberpunk, 4379=steampunk, 3801=dystopia, 9882=space)"),
       primary_release_year: z.number().optional().describe("Filter by release year"),
-      vote_average_gte: z.number().optional().describe("Minimum vote average"),
-      vote_average_lte: z.number().optional().describe("Maximum vote average"),
-      with_original_language: z.string().optional().describe("ISO 639-1 language code (e.g. ja, ko, en)"),
+      vote_average_gte: z.number().optional().describe("Minimum vote average (e.g. 7)"),
+      vote_count_gte: z.number().optional().default(50).describe("Minimum vote count to filter noise (default 50)"),
+      with_original_language: z.string().optional().describe("ISO 639-1 (ja=Japanese, ko=Korean, en=English, pt=Portuguese)"),
     },
-    async ({ page, language, sort_by, with_genres, primary_release_year, vote_average_gte, vote_average_lte, with_original_language }) => {
+    async ({ page, language, sort_by, with_genres, with_keywords, primary_release_year, vote_average_gte, vote_count_gte, with_original_language }) => {
       const params: Record<string, string> = { page: String(page), language, sort_by };
       if (with_genres) params.with_genres = with_genres;
+      if (with_keywords) params.with_keywords = with_keywords;
       if (primary_release_year) params.primary_release_year = String(primary_release_year);
       if (vote_average_gte !== undefined) params["vote_average.gte"] = String(vote_average_gte);
-      if (vote_average_lte !== undefined) params["vote_average.lte"] = String(vote_average_lte);
+      if (vote_count_gte !== undefined) params["vote_count.gte"] = String(vote_count_gte);
       if (with_original_language) params.with_original_language = with_original_language;
       const data = await client.get("/discover/movie", params);
       return { content: [{ type: "text", text: JSON.stringify(slimResultsPage(data), null, 2) }] };
@@ -287,21 +306,25 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
 
   server.tool(
     "tmdb_discover_tv",
-    "Discover TV shows by filters (genre, year, rating). Already returns name, vote_average, genre_ids, popularity — do NOT call get_tv_details for each result.",
+    "Discover TV shows by filters. Returns name, genres (names), vote_average, vote_count, popularity. Use with_keywords for subgenres like cyberpunk (12681), steampunk (4379), dystopia (3801). Common genre IDs: 10765=Sci-Fi&Fantasy, 10759=Action&Adventure, 16=Animation, 18=Drama. Do NOT call get_tv_details for each result.",
     {
       page: z.number().optional().default(1),
-      language: z.string().optional().default("en-US"),
-      sort_by: z.string().optional().default("popularity.desc"),
-      with_genres: z.string().optional().describe("Genre IDs comma-separated"),
+      language: z.string().optional().default("pt-BR"),
+      sort_by: z.string().optional().default("popularity.desc").describe("Sort: popularity.desc, vote_average.desc, first_air_date.desc"),
+      with_genres: z.string().optional().describe("Genre IDs (10765=Sci-Fi&Fantasy, 10759=Action&Adventure, 16=Animation, 18=Drama)"),
+      with_keywords: z.string().optional().describe("Keyword IDs (12681=cyberpunk, 4379=steampunk, 3801=dystopia, 9882=space)"),
       first_air_date_year: z.number().optional(),
-      vote_average_gte: z.number().optional(),
-      with_original_language: z.string().optional(),
+      vote_average_gte: z.number().optional().describe("Minimum vote average (e.g. 7)"),
+      vote_count_gte: z.number().optional().default(50).describe("Minimum vote count to filter noise (default 50)"),
+      with_original_language: z.string().optional().describe("ISO 639-1 (ja=Japanese, ko=Korean, en=English)"),
     },
-    async ({ page, language, sort_by, with_genres, first_air_date_year, vote_average_gte, with_original_language }) => {
+    async ({ page, language, sort_by, with_genres, with_keywords, first_air_date_year, vote_average_gte, vote_count_gte, with_original_language }) => {
       const params: Record<string, string> = { page: String(page), language, sort_by };
       if (with_genres) params.with_genres = with_genres;
+      if (with_keywords) params.with_keywords = with_keywords;
       if (first_air_date_year) params.first_air_date_year = String(first_air_date_year);
       if (vote_average_gte !== undefined) params["vote_average.gte"] = String(vote_average_gte);
+      if (vote_count_gte !== undefined) params["vote_count.gte"] = String(vote_count_gte);
       if (with_original_language) params.with_original_language = with_original_language;
       const data = await client.get("/discover/tv", params);
       return { content: [{ type: "text", text: JSON.stringify(slimResultsPage(data), null, 2) }] };
