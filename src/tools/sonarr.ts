@@ -4,6 +4,8 @@ import { ArrClient } from "../clients/arr-client.js";
 
 export function registerSonarrTools(server: McpServer, client: ArrClient, prefix = "sonarr") {
   const p = prefix;
+  const isAnime = p.includes("anime");
+  const label = isAnime ? `${p} (ANIME ONLY — use this for anime series, not regular TV shows)` : `${p} (regular TV series — NOT anime, use sonarr_animes for anime)`;
 
   const ok = (data: unknown) => ({
     content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
@@ -15,7 +17,7 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
 
   server.tool(
     `${p}_get_series`,
-    `List all series in ${p} library`,
+    `List all series in ${label}`,
     {},
     async () => {
       const data: any[] = await client.get("/api/v3/series");
@@ -334,7 +336,7 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
 
   server.tool(
     `${p}_search_series`,
-    `Search for a series to add to ${p}`,
+    `Search for a series to add to ${label}`,
     { term: z.string().describe("Search term (series name)") },
     async ({ term }) => {
       const data: any[] = await client.get("/api/v3/series/lookup", { term });
@@ -373,7 +375,7 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
 
   server.tool(
     `${p}_add_series`,
-    `Add a new series to ${p}`,
+    `Add a new series to ${label}`,
     {
       tvdbId: z.number().describe("TVDB ID of the series"),
       title: z.string().describe("Series title"),

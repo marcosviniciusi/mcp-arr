@@ -4,12 +4,16 @@ import type { SeerrClient } from "../clients/seerr-client.js";
 
 const slim = (obj: any, keys: string[]) => keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
 
-export function registerSeerrTools(server: McpServer, getClient: () => SeerrClient) {
+export function registerSeerrTools(server: McpServer, getClient: () => SeerrClient, prefix = "seerr") {
+  const p = prefix;
+  const isAnime = p.includes("anime");
+  const label = isAnime ? `${p} (ANIME ONLY — use for anime requests, not regular movies/TV)` : `${p} (regular movies & TV — NOT anime, use seerr_animes for anime)`;
+
   // ── Read ───────────────────────────────────────────────────────
 
   server.tool(
-    "seerr_search",
-    "Search for movies and TV shows in Seerr/Overseerr",
+    `${p}_search`,
+    `Search for movies and TV shows in ${label}`,
     {
       query: z.string().describe("Search term"),
       page: z.number().optional().default(1).describe("Page number"),
@@ -26,8 +30,8 @@ export function registerSeerrTools(server: McpServer, getClient: () => SeerrClie
   );
 
   server.tool(
-    "seerr_get_media",
-    "List all media in Seerr with optional filters",
+    `${p}_get_media`,
+    `List all media in ${label}`,
     {
       take: z.number().optional().default(20).describe("Number of results"),
       skip: z.number().optional().default(0).describe("Offset"),
@@ -45,7 +49,7 @@ export function registerSeerrTools(server: McpServer, getClient: () => SeerrClie
   );
 
   server.tool(
-    "seerr_get_media_by_id",
+    `${p}_get_media_by_id`,
     "Get details of a specific media item",
     { mediaId: z.number().describe("Media ID") },
     async ({ mediaId }) => {
@@ -56,7 +60,7 @@ export function registerSeerrTools(server: McpServer, getClient: () => SeerrClie
   );
 
   server.tool(
-    "seerr_get_requests",
+    `${p}_get_requests`,
     "List media requests with optional filters",
     {
       take: z.number().optional().default(20),
@@ -82,7 +86,7 @@ export function registerSeerrTools(server: McpServer, getClient: () => SeerrClie
   );
 
   server.tool(
-    "seerr_get_request_by_id",
+    `${p}_get_request_by_id`,
     "Get details of a specific request",
     { requestId: z.number().describe("Request ID") },
     async ({ requestId }) => {
@@ -96,7 +100,7 @@ export function registerSeerrTools(server: McpServer, getClient: () => SeerrClie
   );
 
   server.tool(
-    "seerr_get_status",
+    `${p}_get_status`,
     "Get Seerr server status",
     {},
     async () => {
@@ -108,8 +112,8 @@ export function registerSeerrTools(server: McpServer, getClient: () => SeerrClie
   // ── Request ───────────────────────────────────────────────────
 
   server.tool(
-    "seerr_request_movie",
-    "Request a movie in Seerr",
+    `${p}_request_movie`,
+    `Request a movie in ${label}`,
     {
       mediaId: z.number().describe("TMDB movie ID"),
     },
@@ -123,8 +127,8 @@ export function registerSeerrTools(server: McpServer, getClient: () => SeerrClie
   );
 
   server.tool(
-    "seerr_request_tv",
-    "Request a TV show in Seerr",
+    `${p}_request_tv`,
+    `Request a TV show in ${label}`,
     {
       mediaId: z.number().describe("TMDB TV show ID"),
       seasons: z.array(z.number()).optional().describe("Season numbers to request (omit for all)"),
@@ -142,7 +146,7 @@ export function registerSeerrTools(server: McpServer, getClient: () => SeerrClie
   // ── Manage ────────────────────────────────────────────────────
 
   server.tool(
-    "seerr_approve_request",
+    `${p}_approve_request`,
     "Approve a media request",
     { requestId: z.number().describe("Request ID") },
     async ({ requestId }) => {
@@ -152,7 +156,7 @@ export function registerSeerrTools(server: McpServer, getClient: () => SeerrClie
   );
 
   server.tool(
-    "seerr_deny_request",
+    `${p}_deny_request`,
     "Deny a media request",
     { requestId: z.number().describe("Request ID") },
     async ({ requestId }) => {
@@ -162,7 +166,7 @@ export function registerSeerrTools(server: McpServer, getClient: () => SeerrClie
   );
 
   server.tool(
-    "seerr_delete_request",
+    `${p}_delete_request`,
     "Delete a media request",
     { requestId: z.number().describe("Request ID") },
     async ({ requestId }) => {
@@ -174,7 +178,7 @@ export function registerSeerrTools(server: McpServer, getClient: () => SeerrClie
   // ── Admin ─────────────────────────────────────────────────────
 
   server.tool(
-    "seerr_get_users",
+    `${p}_get_users`,
     "List all Seerr users",
     {
       take: z.number().optional().default(20),
@@ -193,7 +197,7 @@ export function registerSeerrTools(server: McpServer, getClient: () => SeerrClie
   );
 
   server.tool(
-    "seerr_get_user_by_id",
+    `${p}_get_user_by_id`,
     "Get details of a specific user",
     { userId: z.number().describe("User ID") },
     async ({ userId }) => {
@@ -203,7 +207,7 @@ export function registerSeerrTools(server: McpServer, getClient: () => SeerrClie
   );
 
   server.tool(
-    "seerr_get_settings",
+    `${p}_get_settings`,
     "Get Seerr server settings",
     {},
     async () => {

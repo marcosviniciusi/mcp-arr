@@ -121,16 +121,38 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
 
   server.tool(
     "tmdb_get_person_details",
-    "Get detailed information about a person",
+    "Get info about a person (actor, director). Returns their name and known-for department.",
     {
       personId: z.number().describe("TMDB person ID"),
       language: z.string().optional().default("en-US"),
     },
     async ({ personId, language }) => {
-      const data: any = await client.get(`/person/${personId}`, { language, append_to_response: "combined_credits" });
-      const s = slim(data, ["id", "name", "birthday", "deathday", "known_for_department", "biography", "place_of_birth"]);
-      if (s.biography) s.biography = s.biography.slice(0, 300);
-      return { content: [{ type: "text", text: JSON.stringify(s, null, 2) }] };
+      const data: any = await client.get(`/person/${personId}`, { language });
+      return { content: [{ type: "text", text: JSON.stringify(slim(data, ["id", "name", "birthday", "known_for_department"]), null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "tmdb_get_person_credits",
+    "Get movies and TV shows an actor/director has worked on. Returns tmdbId ready for radarr/sonarr lookup.",
+    {
+      personId: z.number().describe("TMDB person ID (use tmdb_search_person to find it)"),
+      language: z.string().optional().default("pt-BR"),
+    },
+    async ({ personId, language }) => {
+      const data: any = await client.get(`/person/${personId}/combined_credits`, { language });
+      const cast = (data.cast ?? [])
+        .sort((a: any, b: any) => (b.vote_average ?? 0) - (a.vote_average ?? 0))
+        .slice(0, 20)
+        .map((c: any) => ({
+          tmdbId: c.id,
+          title: c.title ?? c.name,
+          media_type: c.media_type,
+          year: (c.release_date ?? c.first_air_date ?? "").slice(0, 4),
+          vote_average: c.vote_average,
+          character: c.character,
+        }));
+      return { content: [{ type: "text", text: JSON.stringify({ personId, total: (data.cast ?? []).length, credits: cast }, null, 2) }] };
     },
   );
 

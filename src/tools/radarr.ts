@@ -4,6 +4,8 @@ import { ArrClient } from "../clients/arr-client.js";
 
 export function registerRadarrTools(server: McpServer, client: ArrClient, prefix = "radarr") {
   const p = prefix;
+  const isAnime = p.includes("anime");
+  const label = isAnime ? `${p} (ANIME MOVIES ONLY — use this for anime films, not regular movies)` : `${p} (regular movies — NOT anime, use radarr_animes for anime movies)`;
 
   const ok = (data: unknown) => ({
     content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
@@ -17,7 +19,7 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
 
   server.tool(
     `${p}_get_movies`,
-    `List all movies in ${p} library`,
+    `List all movies in ${label}`,
     {},
     async () => {
       const data: any[] = await client.get("/api/v3/movie");
@@ -314,7 +316,7 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
 
   server.tool(
     `${p}_search_movies`,
-    `Search for a movie to add to ${p} (lookup)`,
+    `Search for a movie to add to ${label}`,
     { term: z.string().describe("Search term (movie name)") },
     async ({ term }) => {
       const data: any[] = await client.get("/api/v3/movie/lookup", { term });
@@ -337,7 +339,7 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
 
   server.tool(
     `${p}_add_movie`,
-    `Add a new movie to ${p}`,
+    `Add a new movie to ${label}`,
     {
       tmdbId: z.number().describe("TMDB ID of the movie"),
       title: z.string().describe("Movie title"),
