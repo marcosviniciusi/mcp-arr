@@ -36,12 +36,23 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
 
   server.tool(
     `${p}_get_episodes`,
-    `Get episodes for a series in ${p}`,
+    `Get episodes grouped by season for a series in ${p}. Shows episode number and download status.`,
     { seriesId: z.number().describe("Series ID") },
     async ({ seriesId }) => {
       const data: any[] = await client.get("/api/v3/episode", { seriesId: String(seriesId) });
-      const items = data.map((e: any) => slim(e, ["id", "episodeNumber", "seasonNumber", "title", "airDate", "airDateUtc", "monitored", "hasFile"]));
-      return ok({ total: data.length, items });
+      const seasons: Record<string, { episodes: { ep: number; hasFile: boolean; monitored: boolean }[]; total: number; downloaded: number; missing: number }> = {};
+      for (const ep of data) {
+        const key = `S${String(ep.seasonNumber ?? 0).padStart(2, "0")}`;
+        if (!seasons[key]) seasons[key] = { episodes: [], total: 0, downloaded: 0, missing: 0 };
+        seasons[key].episodes.push({ ep: ep.episodeNumber, hasFile: !!ep.hasFile, monitored: !!ep.monitored });
+        seasons[key].total++;
+        if (ep.hasFile) seasons[key].downloaded++;
+        if (ep.monitored && !ep.hasFile && ep.airDateUtc && new Date(ep.airDateUtc) < new Date()) seasons[key].missing++;
+      }
+      const totalEpisodes = data.length;
+      const totalDownloaded = data.filter((e: any) => e.hasFile).length;
+      const totalMissing = data.filter((e: any) => e.monitored && !e.hasFile && e.airDateUtc && new Date(e.airDateUtc) < new Date()).length;
+      return ok({ totalEpisodes, totalDownloaded, totalMissing, seasons });
     },
   );
 

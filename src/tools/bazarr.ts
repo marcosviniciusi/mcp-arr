@@ -45,26 +45,27 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
 
   server.tool(
     `${p}_get_episodes`,
-    `Get episodes with subtitle info for a series in ${p}`,
+    `Get episodes grouped by season with subtitle status in ${p}. Shows ep number and missing subtitle languages.`,
     { seriesid: z.number().describe("Sonarr series ID") },
     async ({ seriesid }) => {
       const raw: any = await client.get("/api/episodes", { seriesid: String(seriesid) });
       const data: any[] = Array.isArray(raw) ? raw : (raw.data ?? []);
-      return ok({
-        total: data.length,
-        items: data.map((ep: any) => ({
-          sonarrEpisodeId: ep.sonarrEpisodeId,
-          season: ep.season,
-          episode: ep.episode,
-          title: ep.title,
-          missing_subtitles: Array.isArray(ep.missing_subtitles)
-            ? ep.missing_subtitles.map((s: any) => typeof s === "object" ? s.name ?? s.code2 : s)
-            : ep.missing_subtitles,
-          subtitles: Array.isArray(ep.subtitles)
-            ? ep.subtitles.map((s: any) => typeof s === "object" ? s.name ?? s.code2 : s)
-            : ep.subtitles,
-        })),
-      });
+      const seasons: Record<string, { episodes: { ep: number; hasSub: boolean; missing: string[] }[]; total: number; withSub: number; missingSub: number }> = {};
+      for (const ep of data) {
+        const key = `S${String(ep.season ?? 0).padStart(2, "0")}`;
+        if (!seasons[key]) seasons[key] = { episodes: [], total: 0, withSub: 0, missingSub: 0 };
+        const missing = Array.isArray(ep.missing_subtitles)
+          ? ep.missing_subtitles.map((s: any) => typeof s === "object" ? s.name ?? s.code2 : s)
+          : [];
+        seasons[key].episodes.push({ ep: ep.episode, hasSub: missing.length === 0, missing });
+        seasons[key].total++;
+        if (missing.length === 0) seasons[key].withSub++;
+        else seasons[key].missingSub++;
+      }
+      const totalEpisodes = data.length;
+      const totalWithSub = Object.values(seasons).reduce((s, v) => s + v.withSub, 0);
+      const totalMissingSub = Object.values(seasons).reduce((s, v) => s + v.missingSub, 0);
+      return ok({ totalEpisodes, totalWithSub, totalMissingSub, seasons });
     },
   );
 

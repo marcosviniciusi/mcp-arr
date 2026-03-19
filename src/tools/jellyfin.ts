@@ -140,7 +140,7 @@ export function registerJellyfinTools(server: McpServer, client: JellyfinClient,
 
   server.tool(
     `${p}_get_episodes`,
-    `Get episodes for a series in ${p}`,
+    `Get episodes grouped by season for a series in ${p}. Shows episode number and if file exists.`,
     {
       seriesId: z.string().describe("Series item ID"),
       seasonId: z.string().optional().describe("Season ID"),
@@ -150,15 +150,23 @@ export function registerJellyfinTools(server: McpServer, client: JellyfinClient,
         SeriesId: seriesId,
         IncludeItemTypes: "Episode",
         Recursive: "true",
+        Fields: "Path",
       };
       if (seasonId) params.SeasonId = seasonId;
       const data: any = await client.get("/Items", params);
-      const items = (data.Items ?? []).map((i: any) => {
-        const s = slim(i, ["Name", "Id", "IndexNumber", "ParentIndexNumber", "PremiereDate", "Overview"]);
-        if (s.Overview) s.Overview = s.Overview.slice(0, 150);
-        return s;
-      });
-      return { content: [{ type: "text", text: JSON.stringify({ TotalRecordCount: data.TotalRecordCount, Items: items }, null, 2) }] };
+      const episodes = data.Items ?? [];
+      const seasons: Record<string, { episodes: { ep: number; hasFile: boolean }[]; total: number; downloaded: number }> = {};
+      for (const ep of episodes) {
+        const key = `S${String(ep.ParentIndexNumber ?? 0).padStart(2, "0")}`;
+        if (!seasons[key]) seasons[key] = { episodes: [], total: 0, downloaded: 0 };
+        const hasFile = !!(ep.Path || ep.MediaSources?.length);
+        seasons[key].episodes.push({ ep: ep.IndexNumber ?? 0, hasFile });
+        seasons[key].total++;
+        if (hasFile) seasons[key].downloaded++;
+      }
+      const totalEpisodes = episodes.length;
+      const totalDownloaded = Object.values(seasons).reduce((s, v) => s + v.downloaded, 0);
+      return { content: [{ type: "text", text: JSON.stringify({ totalEpisodes, totalDownloaded, seasons }, null, 2) }] };
     },
   );
 
