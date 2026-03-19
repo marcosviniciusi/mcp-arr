@@ -420,17 +420,19 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
     `Add multiple series to ${label} in ONE call. Searches each title, resolves tvdbId, and adds all. Returns results per series. Use this instead of calling search_series + add_series in a loop.`,
     {
       titles: z.array(z.string()).describe("List of series titles to search and add"),
+      qualityProfileId: z.number().optional().describe("Quality profile ID (omit to auto-select best)"),
       seriesType: z.enum(["standard", "daily", "anime"]).optional().default("standard").describe("Series type for all"),
       searchForMissingEpisodes: z.boolean().optional().default(true),
     },
-    async ({ titles, seriesType, searchForMissingEpisodes }) => {
+    async ({ titles, qualityProfileId, seriesType, searchForMissingEpisodes }) => {
       // Fetch profiles + folders + existing series ONCE
       const [profiles, folders, existing] = await Promise.all([
         client.get("/api/v3/qualityprofile") as Promise<any[]>,
         client.get("/api/v3/rootfolder") as Promise<any[]>,
         client.get("/api/v3/series") as Promise<any[]>,
       ]);
-      const profileId = profiles[0]?.id;
+      const bestProfile = profiles.filter((p: any) => !p.name?.match(/disabled/i)).sort((a: any, b: any) => b.id - a.id)[0] ?? profiles[0];
+      const profileId = qualityProfileId ?? bestProfile?.id;
       const rootPath = folders[0]?.path;
       if (!profileId || !rootPath) return ok({ error: "No quality profile or root folder configured" });
       const existingTvdbIds = new Set(existing.map((s: any) => s.tvdbId));

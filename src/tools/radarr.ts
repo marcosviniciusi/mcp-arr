@@ -383,15 +383,18 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
     `Add multiple movies to ${label} in ONE call. Searches each title, resolves tmdbId, and adds all. Returns results per movie. Use this instead of calling search_movies + add_movie in a loop.`,
     {
       titles: z.array(z.string()).describe("List of movie titles to search and add"),
+      qualityProfileId: z.number().optional().describe("Quality profile ID (omit to auto-select best)"),
       searchForMovie: z.boolean().optional().default(true),
       minimumAvailability: z.enum(["announced", "inCinemas", "released"]).optional().default("released"),
     },
-    async ({ titles, searchForMovie, minimumAvailability }) => {
+    async ({ titles, qualityProfileId, searchForMovie, minimumAvailability }) => {
       const [profiles, folders] = await Promise.all([
         client.get("/api/v3/qualityprofile") as Promise<any[]>,
         client.get("/api/v3/rootfolder") as Promise<any[]>,
       ]);
-      const profileId = profiles[0]?.id;
+      // Use provided ID, or pick highest ID (skip DISABLED-like profiles)
+      const bestProfile = profiles.filter((p: any) => !p.name?.match(/disabled/i)).sort((a: any, b: any) => b.id - a.id)[0] ?? profiles[0];
+      const profileId = qualityProfileId ?? bestProfile?.id;
       const rootPath = folders[0]?.path;
       if (!profileId || !rootPath) return ok({ error: "No quality profile or root folder configured" });
 
