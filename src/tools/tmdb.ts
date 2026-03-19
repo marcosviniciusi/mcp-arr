@@ -94,6 +94,17 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
   );
 
   server.tool(
+    "tmdb_search_keyword",
+    "Search TMDB keyword IDs by name. Use this to find keyword IDs for tmdb_discover_movies/tv with_keywords parameter.",
+    { query: z.string().describe("Keyword to search (e.g. cyberpunk, zombie, time-travel)") },
+    async ({ query }) => {
+      const data: any = await client.get("/search/keyword", { query });
+      const results = (data.results ?? []).slice(0, 10).map((k: any) => ({ id: k.id, name: k.name }));
+      return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
+    },
+  );
+
+  server.tool(
     "tmdb_search_person",
     "Search people (actors, directors) on TMDB",
     {
@@ -279,13 +290,13 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
 
   server.tool(
     "tmdb_discover_movies",
-    "Discover movies by filters. Returns title, genres (names), vote_average, vote_count, popularity. Use with_keywords for subgenres like cyberpunk (12681), steampunk (4379), dystopia (3801). Common genre IDs: 28=Action, 878=Sci-Fi, 16=Animation, 18=Drama, 53=Thriller. Do NOT call get_movie_details for each result.",
+    "Discover movies by filters. Returns title, genres (names), vote_average, vote_count, popularity. Use with_keywords for subgenres like cyberpunk (12190), steampunk (10028), dystopia (4565), space (9882). Use tmdb_search_keyword to find other keyword IDs. Common genre IDs: 28=Action, 878=Sci-Fi, 16=Animation, 18=Drama, 53=Thriller. Do NOT call get_movie_details for each result.",
     {
       page: z.number().optional().default(1),
       language: z.string().optional().default("pt-BR"),
       sort_by: z.string().optional().default("popularity.desc").describe("Sort: popularity.desc, vote_average.desc, primary_release_date.desc"),
       with_genres: z.string().optional().describe("Genre IDs comma-separated (878=Sci-Fi, 28=Action, 16=Animation)"),
-      with_keywords: z.string().optional().describe("Keyword IDs comma-separated (12681=cyberpunk, 4379=steampunk, 3801=dystopia, 9882=space)"),
+      with_keywords: z.string().optional().describe("Keyword IDs comma-separated (12190=cyberpunk, 10028=steampunk, 4565=dystopia, 9882=space)"),
       primary_release_year: z.number().optional().describe("Filter by release year"),
       vote_average_gte: z.number().optional().describe("Minimum vote average (e.g. 7)"),
       vote_count_gte: z.number().optional().default(50).describe("Minimum vote count to filter noise (default 50)"),
@@ -306,7 +317,7 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
 
   server.tool(
     "tmdb_discover_tv",
-    "Discover TV shows by filters. Returns name, genres (names), vote_average, vote_count, popularity. Use with_keywords for subgenres like cyberpunk (12681), steampunk (4379), dystopia (3801). Common genre IDs: 10765=Sci-Fi&Fantasy, 10759=Action&Adventure, 16=Animation, 18=Drama. Do NOT call get_tv_details for each result.",
+    "Discover TV shows by filters. Returns name, genres (names), vote_average, vote_count, popularity. Use with_keywords for subgenres like cyberpunk (12190), steampunk (10028), dystopia (4565), space (9882). Use tmdb_search_keyword to find other keyword IDs. Common genre IDs: 10765=Sci-Fi&Fantasy, 10759=Action&Adventure, 16=Animation, 18=Drama. Do NOT call get_tv_details for each result.",
     {
       page: z.number().optional().default(1),
       language: z.string().optional().default("pt-BR"),
