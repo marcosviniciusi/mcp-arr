@@ -547,9 +547,11 @@ async function startStreamableHTTP(config: AppConfig) {
     res.status(404).json({ error: "Not found" });
   });
 
-  app.listen(port, host, () => {
+  const server_ = app.listen(port, host, () => {
     console.error(`[midia-mcp] Streamable-HTTP server listening on http://${host}:${port}`);
   });
+  server_.timeout = 300_000; // 5 min for bulk operations
+  server_.keepAliveTimeout = 120_000;
 
   setupShutdown();
 }

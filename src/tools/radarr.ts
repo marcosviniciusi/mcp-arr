@@ -401,11 +401,18 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
       const existing: any[] = await client.get("/api/v3/movie");
       const existingTmdbIds = new Set(existing.map((m: any) => m.tmdbId));
 
+      // Parallel lookups
+      const lookups = await Promise.allSettled(
+        titles.map(t => client.get("/api/v3/movie/lookup", { term: t }) as Promise<any[]>),
+      );
+
       const results: any[] = [];
-      for (const title of titles) {
+      for (let i = 0; i < titles.length; i++) {
+        const title = titles[i];
         try {
-          const lookup: any[] = await client.get("/api/v3/movie/lookup", { term: title });
-          const match = lookup[0];
+          const lookupResult = lookups[i];
+          if (lookupResult.status === "rejected") { results.push({ title, status: "error", message: "lookup failed" }); continue; }
+          const match = lookupResult.value[0];
           if (!match) { results.push({ title, status: "not_found" }); continue; }
           if (existingTmdbIds.has(match.tmdbId)) { results.push({ title: match.title, tmdbId: match.tmdbId, status: "already_exists" }); continue; }
 
@@ -414,6 +421,7 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
             rootFolderPath: rootPath, monitored: true, minimumAvailability,
             addOptions: { searchForMovie },
           });
+          existingTmdbIds.add(match.tmdbId);
           results.push({ title: match.title, tmdbId: match.tmdbId, year: match.year, status: "added" });
         } catch (e: any) {
           results.push({ title, status: "error", message: e.message?.slice(0, 100) });

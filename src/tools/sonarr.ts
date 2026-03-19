@@ -437,21 +437,28 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
       if (!profileId || !rootPath) return ok({ error: "No quality profile or root folder configured" });
       const existingTvdbIds = new Set(existing.map((s: any) => s.tvdbId));
 
+      // Parallel lookups for all titles
+      const lookups = await Promise.allSettled(
+        titles.map(t => client.get("/api/v3/series/lookup", { term: t }) as Promise<any[]>),
+      );
+
       const results: any[] = [];
-      for (const title of titles) {
+      for (let i = 0; i < titles.length; i++) {
+        const title = titles[i];
         try {
-          const lookup: any[] = await client.get("/api/v3/series/lookup", { term: title });
-          const match = lookup[0];
+          const lookupResult = lookups[i];
+          if (lookupResult.status === "rejected") { results.push({ title, status: "error", message: "lookup failed" }); continue; }
+          const match = lookupResult.value[0];
           if (!match) { results.push({ title, status: "not_found" }); continue; }
 
-          const alreadyExists = existingTvdbIds.has(match.tvdbId);
-          if (alreadyExists) { results.push({ title: match.title, tvdbId: match.tvdbId, status: "already_exists" }); continue; }
+          if (existingTvdbIds.has(match.tvdbId)) { results.push({ title: match.title, tvdbId: match.tvdbId, status: "already_exists" }); continue; }
 
           await client.post("/api/v3/series", {
             tvdbId: match.tvdbId, title: match.title, qualityProfileId: profileId,
             rootFolderPath: rootPath, monitored: true, seasonFolder: true,
             seriesType, addOptions: { searchForMissingEpisodes },
           });
+          existingTvdbIds.add(match.tvdbId); // prevent duplicates in same batch
           results.push({ title: match.title, tvdbId: match.tvdbId, year: match.year, status: "added" });
         } catch (e: any) {
           results.push({ title, status: "error", message: e.message?.slice(0, 100) });
