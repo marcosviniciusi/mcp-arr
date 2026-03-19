@@ -352,6 +352,66 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
     },
   );
 
+  // ── Find by genre (smart discovery) ─────────────────────────
+
+  const REGION_LANGS: Record<string, string[]> = {
+    european: ["fr","de","es","it","nl","da","sv","no","fi","pl","cs","pt","hu","ro","bg","hr","el","tr","is","ru"],
+    asian: ["ja","ko","zh","th","hi","id","tl"],
+    latin: ["es","pt"],
+    nordic: ["da","sv","no","fi","is"],
+  };
+
+  server.tool(
+    "tmdb_find_by_genre",
+    "Find TV shows or movies with the SAME GENRES as a reference title, filtered by region. 1 call replaces: get_details + discover + filter. Returns results with is_anime and add_to.",
+    {
+      mediaType: z.enum(["tv", "movie"]).describe("Type of the reference title"),
+      referenceId: z.number().describe("TMDB ID of the reference title (e.g. The Tunnel = 56336)"),
+      region: z.enum(["european", "asian", "latin", "nordic", "any"]).optional().default("any").describe("Filter by region"),
+      vote_average_gte: z.number().optional().default(7.5).describe("Minimum rating"),
+      vote_count_gte: z.number().optional().default(50).describe("Minimum votes"),
+      limit: z.number().optional().default(10).describe("Max results"),
+      language: z.string().optional().default("pt-BR"),
+    },
+    async ({ mediaType, referenceId, region, vote_average_gte, vote_count_gte, limit, language }) => {
+      // Step 1: Get genres of reference title
+      const ref: any = await client.get(`/${mediaType}/${referenceId}`, { language });
+      const genreIds = (ref.genres ?? []).map((g: any) => g.id).join(",");
+      const refName = ref.name ?? ref.title ?? "Unknown";
+
+      if (!genreIds) return { content: [{ type: "text", text: JSON.stringify({ error: "No genres found for reference title" }, null, 2) }] };
+
+      // Step 2: Discover with those genres, multiple pages if needed for region filter
+      const langs = region !== "any" ? REGION_LANGS[region] : null;
+      const allResults: any[] = [];
+
+      for (let page = 1; page <= 3 && allResults.length < limit; page++) {
+        const params: Record<string, string> = {
+          with_genres: genreIds,
+          sort_by: "vote_average.desc",
+          "vote_average.gte": String(vote_average_gte),
+          "vote_count.gte": String(vote_count_gte),
+          language,
+          page: String(page),
+        };
+        const endpoint = mediaType === "tv" ? "/discover/tv" : "/discover/movie";
+        const data: any = await client.get(endpoint, params);
+        const items = (data.results ?? [])
+          .filter((r: any) => r.id !== referenceId) // Exclude the reference itself
+          .filter((r: any) => !langs || langs.includes(r.original_language));
+        allResults.push(...items);
+      }
+
+      const results = allResults.slice(0, limit).map(slimTmdbResult);
+      return { content: [{ type: "text", text: JSON.stringify({
+        reference: { id: referenceId, name: refName, genres: (ref.genres ?? []).map((g: any) => g.name) },
+        region,
+        total_found: allResults.length,
+        results,
+      }, null, 2) }] };
+    },
+  );
+
   // ── Description & Similar ────────────────────────────────────
 
   server.tool(

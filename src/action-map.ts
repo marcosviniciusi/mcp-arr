@@ -113,7 +113,7 @@ export const ACTION_MAP: Record<string, Record<string, string[]>> = {
       "get_description", "get_similar", "get_person_credits",
     ],
     search: ["search_multi", "search_movies", "search_tv", "search_person", "search_keyword"],
-    discover: ["discover_movies", "discover_tv"],
+    discover: ["discover_movies", "discover_tv", "find_by_genre"],
     rate: ["rate_movie", "rate_tv"],
   },
 
