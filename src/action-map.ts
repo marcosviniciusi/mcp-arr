@@ -110,6 +110,7 @@ export const ACTION_MAP: Record<string, Record<string, string[]>> = {
       "get_movie_details", "get_tv_details", "get_person_details",
       "get_trending", "get_popular_movies", "get_popular_tv",
       "get_movie_credits", "get_tv_credits", "get_recommendations", "get_genres",
+      "get_description", "get_similar",
     ],
     search: ["search_multi", "search_movies", "search_tv", "search_person"],
     discover: ["discover_movies", "discover_tv"],

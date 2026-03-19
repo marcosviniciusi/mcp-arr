@@ -282,6 +282,38 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
     },
   );
 
+  // ── Description & Similar ────────────────────────────────────
+
+  server.tool(
+    "tmdb_get_description",
+    "Get the synopsis/overview of a movie or TV show. Use this when you need to know what a title is about.",
+    {
+      mediaType: z.enum(["movie", "tv"]).describe("Media type"),
+      mediaId: z.number().describe("TMDB ID"),
+      language: z.string().optional().default("pt-BR"),
+    },
+    async ({ mediaType, mediaId, language }) => {
+      const data: any = await client.get(`/${mediaType}/${mediaId}`, { language });
+      const title = mediaType === "tv" ? data.name : data.title;
+      return { content: [{ type: "text", text: JSON.stringify({ id: data.id, title, overview: data.overview ?? "", tagline: data.tagline ?? "" }, null, 2) }] };
+    },
+  );
+
+  server.tool(
+    "tmdb_get_similar",
+    "Get similar movies or TV shows based on genres and keywords. Use this to find titles like a given one.",
+    {
+      mediaType: z.enum(["movie", "tv"]).describe("Media type"),
+      mediaId: z.number().describe("TMDB ID"),
+      page: z.number().optional().default(1),
+      language: z.string().optional().default("pt-BR"),
+    },
+    async ({ mediaType, mediaId, page, language }) => {
+      const data = await client.get(`/${mediaType}/${mediaId}/similar`, { page: String(page), language });
+      return { content: [{ type: "text", text: JSON.stringify(slimResultsPage(data), null, 2) }] };
+    },
+  );
+
   // ── Rate ──────────────────────────────────────────────────────
 
   server.tool(
