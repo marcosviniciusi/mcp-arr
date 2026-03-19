@@ -45,7 +45,7 @@ export function registerRyotTools(server: McpServer, getClient: () => RyotClient
       `, { input: { search: { query, page }, lot, source } });
       const resp = data?.metadataSearch?.response;
       if (resp && Array.isArray(resp.items)) {
-        resp.items = resp.items.map((i: any) => slim(i, ["identifier", "title", "image", "publishYear"]));
+        resp.items = resp.items.map((i: any) => slim(i, ["identifier", "title", "publishYear"]));
       }
       return ok(data);
     },
@@ -63,21 +63,13 @@ export function registerRyotTools(server: McpServer, getClient: () => RyotClient
       const data: any = await getClient().query(`
         query GetMediaDetails($metadataId: String!) {
           metadataDetails(metadataId: $metadataId) {
-            id lot title description publishYear publishDate
+            id lot title publishYear publishDate
             genres
             providerRating
             group { id name part }
-            assets { images videos }
           }
         }
       `, { metadataId });
-      const details = data?.metadataDetails;
-      if (details) {
-        if (details.description) details.description = details.description.slice(0, 300);
-        if (details.assets?.images && Array.isArray(details.assets.images)) {
-          details.assets.images = details.assets.images.slice(0, 3);
-        }
-      }
       return ok(data);
     },
   );

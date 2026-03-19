@@ -15,22 +15,20 @@ function slimMangaNode(node: any): any {
 }
 
 function slimAnimeDetails(data: any): any {
-  const s = slim(data, ["id", "title", "main_picture", "synopsis", "mean", "rank", "popularity", "status", "num_episodes", "start_date", "end_date", "genres"]);
-  if (s.synopsis) s.synopsis = s.synopsis.slice(0, 300);
+  const s = slim(data, ["id", "title", "mean", "rank", "popularity", "status", "num_episodes", "start_date", "end_date", "genres", "source", "rating"]);
   if (Array.isArray(s.genres)) s.genres = s.genres.map((g: any) => g.name);
   return s;
 }
 
 function slimMangaDetails(data: any): any {
-  const s = slim(data, ["id", "title", "main_picture", "synopsis", "mean", "rank", "popularity", "status", "num_chapters", "num_volumes", "start_date", "end_date", "genres"]);
-  if (s.synopsis) s.synopsis = s.synopsis.slice(0, 300);
+  const s = slim(data, ["id", "title", "mean", "rank", "popularity", "status", "num_chapters", "num_volumes", "start_date", "end_date", "genres"]);
   if (Array.isArray(s.genres)) s.genres = s.genres.map((g: any) => g.name);
   return s;
 }
 
 export function registerMalTools(server: McpServer, client: MalClient) {
-  const ANIME_FIELDS = "id,title,main_picture,alternative_titles,start_date,end_date,synopsis,mean,rank,popularity,num_list_users,num_scoring_users,media_type,status,genres,num_episodes,source,rating,studios";
-  const MANGA_FIELDS = "id,title,main_picture,alternative_titles,start_date,end_date,synopsis,mean,rank,popularity,num_list_users,num_scoring_users,media_type,status,genres,num_volumes,num_chapters,authors";
+  const ANIME_FIELDS = "id,title,mean,rank,popularity,media_type,status,genres,num_episodes,start_date,end_date,source,rating";
+  const MANGA_FIELDS = "id,title,mean,rank,popularity,media_type,status,genres,num_volumes,num_chapters,start_date,end_date";
 
   // ── Search ────────────────────────────────────────────────────
 

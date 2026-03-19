@@ -10,14 +10,10 @@ function slimTmdbResult(item: any): any {
     return slim(item, ["id", "name", "known_for_department"]);
   }
   if (mt === "tv" || item.first_air_date !== undefined) {
-    const s = slim(item, ["id", "name", "first_air_date", "vote_average", "overview"]);
-    if (s.overview) s.overview = s.overview.slice(0, 150);
-    return s;
+    return slim(item, ["id", "name", "first_air_date", "vote_average", "original_language"]);
   }
   // default: movie
-  const s = slim(item, ["id", "title", "release_date", "vote_average", "overview"]);
-  if (s.overview) s.overview = s.overview.slice(0, 150);
-  return s;
+  return slim(item, ["id", "title", "release_date", "vote_average", "original_language"]);
 }
 
 function slimResultsPage(data: any, limit = 10): any {
@@ -100,11 +96,9 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
       language: z.string().optional().default("en-US"),
     },
     async ({ movieId, language }) => {
-      const data: any = await client.get(`/movie/${movieId}`, { language, append_to_response: "credits,videos,keywords" });
-      const s = slim(data, ["id", "title", "release_date", "runtime", "vote_average", "overview", "genres", "status", "budget", "revenue", "production_companies"]);
-      if (s.overview) s.overview = s.overview.slice(0, 300);
+      const data: any = await client.get(`/movie/${movieId}`, { language });
+      const s = slim(data, ["id", "title", "release_date", "runtime", "vote_average", "genres", "status", "original_language"]);
       if (Array.isArray(s.genres)) s.genres = s.genres.map((g: any) => g.name);
-      if (Array.isArray(s.production_companies)) s.production_companies = s.production_companies.map((c: any) => c.name);
       return { content: [{ type: "text", text: JSON.stringify(s, null, 2) }] };
     },
   );
@@ -117,9 +111,8 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
       language: z.string().optional().default("en-US"),
     },
     async ({ tvId, language }) => {
-      const data: any = await client.get(`/tv/${tvId}`, { language, append_to_response: "credits,videos,keywords" });
-      const s = slim(data, ["id", "name", "first_air_date", "status", "vote_average", "overview", "genres", "number_of_seasons", "number_of_episodes", "networks"]);
-      if (s.overview) s.overview = s.overview.slice(0, 300);
+      const data: any = await client.get(`/tv/${tvId}`, { language });
+      const s = slim(data, ["id", "name", "first_air_date", "status", "vote_average", "genres", "number_of_seasons", "number_of_episodes", "networks", "original_language"]);
       if (Array.isArray(s.genres)) s.genres = s.genres.map((g: any) => g.name);
       if (Array.isArray(s.networks)) s.networks = s.networks.map((n: any) => n.name);
       return { content: [{ type: "text", text: JSON.stringify(s, null, 2) }] };
