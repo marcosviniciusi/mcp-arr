@@ -316,12 +316,21 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
 
   server.tool(
     `${p}_search_movies`,
-    `Search for a movie to add to ${label}`,
+    `Search for a movie to add to ${label}. Returns search results + qualityProfiles + rootFolders so you can call add_movie directly without extra lookups.`,
     { term: z.string().describe("Search term (movie name)") },
     async ({ term }) => {
-      const data: any[] = await client.get("/api/v3/movie/lookup", { term });
+      const [data, profiles, folders] = await Promise.all([
+        client.get("/api/v3/movie/lookup", { term }) as Promise<any[]>,
+        client.get("/api/v3/qualityprofile") as Promise<any[]>,
+        client.get("/api/v3/rootfolder") as Promise<any[]>,
+      ]);
       const results = data.slice(0, 10).map((m: any) => slim(m, ["title", "year", "tmdbId", "imdbId", "status", "studio", "runtime"]));
-      return ok({ total: data.length, results });
+      return ok({
+        total: data.length,
+        results,
+        qualityProfiles: profiles.map((p: any) => ({ id: p.id, name: p.name })),
+        rootFolders: folders.map((f: any) => ({ path: f.path, freeSpace: f.freeSpace })),
+      });
     },
   );
 

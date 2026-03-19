@@ -337,15 +337,23 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
 
   server.tool(
     `${p}_search_artists`,
-    `Search for an artist to add to ${p}`,
+    `Search for an artist to add to ${p}. Returns results + qualityProfiles + metadataProfiles + rootFolders so you can call add_artist directly.`,
     { term: z.string().describe("Search term (artist name)") },
     async ({ term }) => {
-      const data: any[] = await client.get("/api/v1/artist/lookup", { term });
+      const [data, qProfiles, mProfiles, folders] = await Promise.all([
+        client.get("/api/v1/artist/lookup", { term }) as Promise<any[]>,
+        client.get("/api/v1/qualityprofile") as Promise<any[]>,
+        client.get("/api/v1/metadataprofile") as Promise<any[]>,
+        client.get("/api/v1/rootfolder") as Promise<any[]>,
+      ]);
       return ok({
         total: data.length,
         results: data.slice(0, 10).map((a: any) =>
           slim(a, ["artistName", "foreignArtistId", "status", "artistType", "disambiguation"]),
         ),
+        qualityProfiles: qProfiles.map((p: any) => ({ id: p.id, name: p.name })),
+        metadataProfiles: mProfiles.map((p: any) => ({ id: p.id, name: p.name })),
+        rootFolders: folders.map((f: any) => ({ path: f.path, freeSpace: f.freeSpace })),
       });
     },
   );
