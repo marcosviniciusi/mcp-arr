@@ -23,6 +23,7 @@ export class NZBGetClient {
         Authorization: this.authHeader,
       },
       body: JSON.stringify({ method, params, id: 1 }),
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!res.ok) {

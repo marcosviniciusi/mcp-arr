@@ -20,6 +20,7 @@ export class QBittorrentClient {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: `username=${encodeURIComponent(this.username)}&password=${encodeURIComponent(this.password)}`,
       redirect: "manual",
+      signal: AbortSignal.timeout(30_000),
     });
 
     const setCookie = res.headers.get("set-cookie");
@@ -57,13 +58,14 @@ export class QBittorrentClient {
         method,
         headers,
         body,
+        signal: AbortSignal.timeout(60_000),
       });
 
       if (res.status === 403) {
         this.cookie = null;
         await this.login();
         headers["Cookie"] = this.cookie!;
-        return fetch(`${this.baseUrl}${path}`, { method, headers, body });
+        return fetch(`${this.baseUrl}${path}`, { method, headers, body, signal: AbortSignal.timeout(60_000) });
       }
 
       return res;

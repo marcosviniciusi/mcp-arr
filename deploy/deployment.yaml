@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/name: midia-mcp
     app.kubernetes.io/component: mcp-server
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: midia-mcp
@@ -28,6 +28,8 @@ spec:
           env:
             - name: MIDIA_MCP_CONFIG
               value: /etc/midia-mcp/config.yaml
+            - name: TRANSPORT
+              value: "streamable-http"
           volumeMounts:
             - name: config
               mountPath: /etc/midia-mcp

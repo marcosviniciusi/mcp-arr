@@ -2,6 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { NZBGetClient } from "../clients/nzbget-client.js";
 
+const slim = (obj: any, keys: string[]) => keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
+
 export function registerNZBGetTools(server: McpServer, client: NZBGetClient) {
   server.tool(
     "nzbget_get_status",
@@ -18,8 +20,10 @@ export function registerNZBGetTools(server: McpServer, client: NZBGetClient) {
     "List active downloads in NZBGet queue",
     {},
     async () => {
-      const data = await client.call("listgroups");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.call("listgroups");
+      const arr = Array.isArray(data) ? data : [];
+      const items = arr.map((i: any) => slim(i, ["NZBID", "NZBName", "Status", "FileSizeMB", "DownloadedSizeMB", "Category"]));
+      return { content: [{ type: "text", text: JSON.stringify({ total: arr.length, items }, null, 2) }] };
     },
   );
 
@@ -30,8 +34,10 @@ export function registerNZBGetTools(server: McpServer, client: NZBGetClient) {
       hidden: z.boolean().optional().default(false).describe("Include hidden entries"),
     },
     async ({ hidden }) => {
-      const data = await client.call("history", [hidden]);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.call("history", [hidden]);
+      const arr = Array.isArray(data) ? data : [];
+      const items = arr.map((i: any) => slim(i, ["NZBID", "NZBName", "Status", "FileSizeMB", "Category", "DownloadTimeSec"]));
+      return { content: [{ type: "text", text: JSON.stringify({ total: arr.length, items }, null, 2) }] };
     },
   );
 

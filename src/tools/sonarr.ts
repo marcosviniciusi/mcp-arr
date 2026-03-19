@@ -9,43 +9,61 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
     content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
   });
 
+  const slim = (obj: any, keys: string[]) => keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
+
   // ─── READ ───────────────────────────────────────────────────────────
 
   server.tool(
     `${p}_get_series`,
     `List all series in ${p} library`,
     {},
-    async () => ok(await client.get("/api/v3/series")),
+    async () => {
+      const data: any[] = await client.get("/api/v3/series");
+      const items = data.slice(0, 25).map((s: any) => slim(s, ["id", "title", "year", "tvdbId", "imdbId", "status", "network", "seriesType", "monitored", "seasonCount", "episodeCount", "episodeFileCount"]));
+      return ok({ total: data.length, items });
+    },
   );
 
   server.tool(
     `${p}_get_series_by_id`,
     `Get details for a specific series in ${p}`,
     { seriesId: z.number().describe("Series ID") },
-    async ({ seriesId }) => ok(await client.get(`/api/v3/series/${seriesId}`)),
+    async ({ seriesId }) => {
+      const data = await client.get(`/api/v3/series/${seriesId}`);
+      return ok(slim(data, ["id", "title", "year", "tvdbId", "imdbId", "status", "network", "seriesType", "monitored", "overview", "seasonCount", "statistics", "path"]));
+    },
   );
 
   server.tool(
     `${p}_get_episodes`,
     `Get episodes for a series in ${p}`,
     { seriesId: z.number().describe("Series ID") },
-    async ({ seriesId }) =>
-      ok(await client.get("/api/v3/episode", { seriesId: String(seriesId) })),
+    async ({ seriesId }) => {
+      const data: any[] = await client.get("/api/v3/episode", { seriesId: String(seriesId) });
+      const items = data.map((e: any) => slim(e, ["id", "episodeNumber", "seasonNumber", "title", "airDate", "airDateUtc", "monitored", "hasFile"]));
+      return ok({ total: data.length, items });
+    },
   );
 
   server.tool(
     `${p}_get_episode_by_id`,
     `Get details for a specific episode in ${p}`,
     { episodeId: z.number().describe("Episode ID") },
-    async ({ episodeId }) => ok(await client.get(`/api/v3/episode/${episodeId}`)),
+    async ({ episodeId }) => {
+      const data = await client.get(`/api/v3/episode/${episodeId}`);
+      return ok(slim(data, ["id", "episodeNumber", "seasonNumber", "title", "airDate", "monitored", "hasFile", "overview"]));
+    },
   );
 
   server.tool(
     `${p}_get_episode_files`,
     `Get episode files for a series in ${p}`,
     { seriesId: z.number().describe("Series ID") },
-    async ({ seriesId }) =>
-      ok(await client.get("/api/v3/episodefile", { seriesId: String(seriesId) })),
+    async ({ seriesId }) => {
+      const data: any[] = await client.get("/api/v3/episodefile", { seriesId: String(seriesId) });
+      const items = data.map((f: any) => slim(f, ["id", "seriesId", "seasonNumber", "relativePath", "size", "quality"]));
+      return ok({ total: data.length, items });
+    },
   );
 
   server.tool(
@@ -61,7 +79,13 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
       if (start) params.start = start;
       if (end) params.end = end;
       if (unmonitored !== undefined) params.unmonitored = String(unmonitored);
-      return ok(await client.get("/api/v3/calendar", params));
+      const data: any[] = await client.get("/api/v3/calendar", params);
+      const items = data.map((e: any) => {
+        const item = slim(e, ["id", "seriesId", "episodeNumber", "seasonNumber", "title", "airDate", "airDateUtc", "hasFile"]);
+        if (e.series) item.series = slim(e.series, ["id", "title"]);
+        return item;
+      });
+      return ok(items);
     },
   );
 
@@ -69,7 +93,17 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
     `${p}_get_queue`,
     `Get current download queue in ${p}`,
     {},
-    async () => ok(await client.get("/api/v3/queue")),
+    async () => {
+      const data = await client.get("/api/v3/queue");
+      if (Array.isArray(data)) {
+        return ok(data.map((q: any) => slim(q, ["id", "title", "status", "sizeleft", "size", "timeleft", "estimatedCompletionTime", "downloadClient"])));
+      }
+      const d = data as any;
+      if (d.records) {
+        d.records = d.records.map((q: any) => slim(q, ["id", "title", "status", "sizeleft", "size", "timeleft", "estimatedCompletionTime", "downloadClient"]));
+      }
+      return ok(d);
+    },
   );
 
   server.tool(
@@ -90,7 +124,12 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
         includeSeries: String(includeSeries),
         includeEpisode: String(includeEpisode),
       };
-      return ok(await client.get("/api/v3/queue", params));
+      const data = await client.get("/api/v3/queue", params);
+      const d = data as any;
+      if (d.records) {
+        d.records = d.records.map((q: any) => slim(q, ["id", "title", "status", "sizeleft", "size", "timeleft", "estimatedCompletionTime", "downloadClient"]));
+      }
+      return ok(d);
     },
   );
 
@@ -98,14 +137,20 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
     `${p}_get_quality_profiles`,
     `List available quality profiles in ${p}`,
     {},
-    async () => ok(await client.get("/api/v3/qualityprofile")),
+    async () => {
+      const data: any[] = await client.get("/api/v3/qualityprofile");
+      return ok(data.map((p: any) => slim(p, ["id", "name"])));
+    },
   );
 
   server.tool(
     `${p}_get_root_folders`,
     `List configured root folders in ${p}`,
     {},
-    async () => ok(await client.get("/api/v3/rootfolder")),
+    async () => {
+      const data: any[] = await client.get("/api/v3/rootfolder");
+      return ok(data.map((f: any) => slim(f, ["id", "path", "freeSpace"])));
+    },
   );
 
   server.tool(
@@ -140,7 +185,12 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
         sortDirection,
       };
       if (episodeId !== undefined) params.episodeId = String(episodeId);
-      return ok(await client.get("/api/v3/history", params));
+      const data = await client.get("/api/v3/history", params);
+      const d = data as any;
+      if (d.records) {
+        d.records = d.records.map((r: any) => slim(r, ["id", "seriesId", "episodeId", "sourceTitle", "date", "eventType", "quality"]));
+      }
+      return ok(d);
     },
   );
 
@@ -151,13 +201,17 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
       page: z.number().optional().default(1).describe("Page number"),
       pageSize: z.number().optional().default(20).describe("Page size"),
     },
-    async ({ page, pageSize }) =>
-      ok(
-        await client.get("/api/v3/blocklist", {
-          page: String(page),
-          pageSize: String(pageSize),
-        }),
-      ),
+    async ({ page, pageSize }) => {
+      const data = await client.get("/api/v3/blocklist", {
+        page: String(page),
+        pageSize: String(pageSize),
+      });
+      const d = data as any;
+      if (d.records) {
+        d.records = d.records.map((r: any) => slim(r, ["id", "seriesId", "sourceTitle", "date", "quality"]));
+      }
+      return ok(d);
+    },
   );
 
   server.tool(
@@ -178,7 +232,12 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
         sortDirection,
       };
       if (monitored !== undefined) params.monitored = String(monitored);
-      return ok(await client.get("/api/v3/wanted/missing", params));
+      const data = await client.get("/api/v3/wanted/missing", params);
+      const d = data as any;
+      if (d.records) {
+        d.records = d.records.map((r: any) => slim(r, ["id", "seriesId", "episodeNumber", "seasonNumber", "title", "airDate", "monitored"]));
+      }
+      return ok(d);
     },
   );
 
@@ -207,22 +266,30 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
     `${p}_get_language_profiles`,
     `List language profiles in ${p}`,
     {},
-    async () => ok(await client.get("/api/v3/languageprofile")),
+    async () => {
+      const data: any[] = await client.get("/api/v3/languageprofile");
+      return ok(data.map((p: any) => slim(p, ["id", "name"])));
+    },
   );
 
   server.tool(
     `${p}_get_commands`,
     `List running/queued commands in ${p}`,
     {},
-    async () => ok(await client.get("/api/v3/command")),
+    async () => {
+      const data: any[] = await client.get("/api/v3/command");
+      return ok(data.map((c: any) => slim(c, ["id", "name", "status", "started", "ended"])));
+    },
   );
 
   server.tool(
     `${p}_get_rename_list`,
     `Preview file rename for a series in ${p}`,
     { seriesId: z.number().describe("Series ID") },
-    async ({ seriesId }) =>
-      ok(await client.get("/api/v3/rename", { seriesId: String(seriesId) })),
+    async ({ seriesId }) => {
+      const data: any[] = await client.get("/api/v3/rename", { seriesId: String(seriesId) });
+      return ok(data.map((r: any) => slim(r, ["seriesId", "seasonNumber", "episodeNumbers", "existingPath", "newPath"])));
+    },
   );
 
   server.tool(
@@ -243,7 +310,12 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
         sortDirection,
       };
       if (level) params.level = level;
-      return ok(await client.get("/api/v3/log", params));
+      const data = await client.get("/api/v3/log", params);
+      const d = data as any;
+      if (d.records) {
+        d.records = d.records.map((r: any) => slim(r, ["time", "level", "logger", "message"]));
+      }
+      return ok(d);
     },
   );
 
@@ -253,8 +325,11 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
     `${p}_search_series`,
     `Search for a series to add to ${p}`,
     { term: z.string().describe("Search term (series name)") },
-    async ({ term }) =>
-      ok(await client.get("/api/v3/series/lookup", { term })),
+    async ({ term }) => {
+      const data: any[] = await client.get("/api/v3/series/lookup", { term });
+      const results = data.slice(0, 10).map((s: any) => slim(s, ["title", "year", "tvdbId", "imdbId", "status", "network", "seriesType"]));
+      return ok({ total: data.length, results });
+    },
   );
 
   server.tool(

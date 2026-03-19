@@ -26,7 +26,7 @@ import {
 } from "./clients/jellyseerr-client.js";
 import { TmdbClient } from "./clients/tmdb-client.js";
 import { MalClient } from "./clients/mal-client.js";
-import { RyotClient } from "./clients/ryot-client.js";
+import { RyotClient, createRyotClients, type RyotConfig } from "./clients/ryot-client.js";
 import {
   createSeerrClients,
   type SeerrClient,
@@ -124,6 +124,23 @@ function getSeerrClient(authLevel: string): SeerrClient {
   return client;
 }
 
+// ─── Ryot client registry (per auth_level) ──────────────────────
+
+let ryotClients: Map<string, RyotClient> | null = null;
+
+function getRyotClient(authLevel: string): RyotClient {
+  if (!ryotClients) throw new Error("Ryot not configured");
+  const client = ryotClients.get(authLevel);
+  if (!client) {
+    return ryotClients.get("admin") ?? ryotClients.values().next().value!;
+  }
+  return client;
+}
+
+// ─── Emby user resolution ────────────────────────────────────────
+
+let embyUserName: string | undefined;
+
 // ─── Register tools ──────────────────────────────────────────────
 
 function registerAllTools(
@@ -131,6 +148,7 @@ function registerAllTools(
   services: Record<string, ServiceConfig>,
   jellyseerrAuthLevel?: string,
   seerrAuthLevel?: string,
+  ryotAuthLevel?: string,
 ): void {
   for (const [key, svc] of Object.entries(services)) {
     if (!svc) continue;
@@ -238,9 +256,9 @@ function registerAllTools(
         break;
 
       case "ryot":
-        if (svc.url && (svc.api_token || svc.api_key)) {
-          const token = svc.api_token || svc.api_key!;
-          registerRyotTools(server, new RyotClient(svc.url, token));
+        if (svc.url && ryotClients) {
+          const level = ryotAuthLevel || "admin";
+          registerRyotTools(server, () => getRyotClient(level));
         }
         break;
     }
@@ -268,6 +286,9 @@ function initServiceClients(services: Record<string, ServiceConfig>): void {
   if (services.seerr?.url) {
     seerrClients = createSeerrClients(services.seerr as SeerrConfig);
   }
+  if (services.ryot?.url) {
+    ryotClients = createRyotClients(services.ryot as RyotConfig);
+  }
 }
 
 // ─── Init OTel ───────────────────────────────────────────────────
@@ -290,7 +311,7 @@ async function startStdio(config: AppConfig) {
   const server = new McpServer({ name: "midia-mcp", version: VERSION });
 
   initServiceClients(services);
-  registerAllTools(server, services, "admin", "admin");
+  registerAllTools(server, services, "admin", "admin", "admin");
   logEnabledServices(services);
 
   const transport = new StdioServerTransport();
@@ -348,6 +369,7 @@ async function startSSE(config: AppConfig) {
     const transport = new SSEServerTransport("/messages", res);
     const jellyseerrLevel = getJellyseerrAuthLevel(tokenEntry);
     const seerrLevel = getAuthLevel(tokenEntry, "seerr");
+    const ryotLevel = getAuthLevel(tokenEntry, "ryot");
 
     const context: SessionContext = {
       tokenEntry,
@@ -357,7 +379,7 @@ async function startSSE(config: AppConfig) {
 
     const server = createGuardedServer(() => {
       const s = new McpServer({ name: "midia-mcp", version: VERSION });
-      registerAllTools(s, services, jellyseerrLevel, seerrLevel);
+      registerAllTools(s, services, jellyseerrLevel, seerrLevel, ryotLevel);
       return s;
     }, context);
 
@@ -469,6 +491,7 @@ async function startStreamableHTTP(config: AppConfig) {
     // New session
     const jellyseerrLevel = getJellyseerrAuthLevel(tokenEntry);
     const seerrLevel = getAuthLevel(tokenEntry, "seerr");
+    const ryotLevel = getAuthLevel(tokenEntry, "ryot");
 
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => `sh-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -506,7 +529,7 @@ async function startStreamableHTTP(config: AppConfig) {
 
     const server = createGuardedServer(() => {
       const s = new McpServer({ name: "midia-mcp", version: VERSION });
-      registerAllTools(s, services, jellyseerrLevel, seerrLevel);
+      registerAllTools(s, services, jellyseerrLevel, seerrLevel, ryotLevel);
       return s;
     }, context);
 
@@ -562,7 +585,7 @@ function setupShutdown(): void {
 // ─── Entrypoint ──────────────────────────────────────────────────
 
 const config = loadConfig();
-const mode = config.transport ?? process.env.TRANSPORT ?? "stdio";
+const mode = process.env.TRANSPORT ?? config.transport ?? "stdio";
 
 if (mode === "sse") {
   startSSE(config).catch((err) => {

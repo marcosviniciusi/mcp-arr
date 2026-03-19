@@ -9,6 +9,8 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
     content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
   });
 
+  const slim = (obj: any, keys: string[]) => keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
+
   // ---------------------------------------------------------------------------
   // READ
   // ---------------------------------------------------------------------------
@@ -17,14 +19,21 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
     `${p}_get_movies`,
     `List all movies in ${p} library`,
     {},
-    async () => ok(await client.get("/api/v3/movie")),
+    async () => {
+      const data: any[] = await client.get("/api/v3/movie");
+      const items = data.slice(0, 25).map((m: any) => slim(m, ["id", "title", "year", "tmdbId", "imdbId", "status", "studio", "monitored", "hasFile", "sizeOnDisk", "runtime"]));
+      return ok({ total: data.length, items });
+    },
   );
 
   server.tool(
     `${p}_get_movie_by_id`,
     `Get details for a specific movie in ${p}`,
     { movieId: z.number().describe("Movie ID") },
-    async ({ movieId }) => ok(await client.get(`/api/v3/movie/${movieId}`)),
+    async ({ movieId }) => {
+      const data = await client.get(`/api/v3/movie/${movieId}`);
+      return ok(slim(data, ["id", "title", "year", "tmdbId", "imdbId", "status", "studio", "monitored", "hasFile", "sizeOnDisk", "runtime", "overview", "path", "quality"]));
+    },
   );
 
   server.tool(
@@ -38,7 +47,8 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
       const params: Record<string, string> = {};
       if (start) params.start = start;
       if (end) params.end = end;
-      return ok(await client.get("/api/v3/calendar", params));
+      const data: any[] = await client.get("/api/v3/calendar", params);
+      return ok(data.map((m: any) => slim(m, ["id", "title", "year", "tmdbId", "inCinemas", "digitalRelease", "physicalRelease", "hasFile", "monitored"])));
     },
   );
 
@@ -46,7 +56,17 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
     `${p}_get_queue`,
     `Get current download queue in ${p}`,
     {},
-    async () => ok(await client.get("/api/v3/queue")),
+    async () => {
+      const data = await client.get("/api/v3/queue");
+      if (Array.isArray(data)) {
+        return ok(data.map((q: any) => slim(q, ["id", "title", "status", "size", "sizeleft", "timeleft", "estimatedCompletionTime"])));
+      }
+      const d = data as any;
+      if (d.records) {
+        d.records = d.records.map((q: any) => slim(q, ["id", "title", "status", "size", "sizeleft", "timeleft", "estimatedCompletionTime"]));
+      }
+      return ok(d);
+    },
   );
 
   server.tool(
@@ -67,7 +87,12 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
         sortDirection,
         includeUnknownMovieItems: String(includeUnknownMovieItems),
       };
-      return ok(await client.get("/api/v3/queue", params));
+      const data = await client.get("/api/v3/queue", params);
+      const d = data as any;
+      if (d.records) {
+        d.records = d.records.map((q: any) => slim(q, ["id", "title", "status", "size", "sizeleft", "timeleft", "estimatedCompletionTime"]));
+      }
+      return ok(d);
     },
   );
 
@@ -75,14 +100,20 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
     `${p}_get_quality_profiles`,
     `List available quality profiles in ${p}`,
     {},
-    async () => ok(await client.get("/api/v3/qualityprofile")),
+    async () => {
+      const data: any[] = await client.get("/api/v3/qualityprofile");
+      return ok(data.map((p: any) => slim(p, ["id", "name"])));
+    },
   );
 
   server.tool(
     `${p}_get_root_folders`,
     `List configured root folders in ${p}`,
     {},
-    async () => ok(await client.get("/api/v3/rootfolder")),
+    async () => {
+      const data: any[] = await client.get("/api/v3/rootfolder");
+      return ok(data.map((f: any) => slim(f, ["id", "path", "freeSpace"])));
+    },
   );
 
   server.tool(
@@ -117,7 +148,12 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
         sortDirection,
       };
       if (eventType !== undefined) params.eventType = String(eventType);
-      return ok(await client.get("/api/v3/history", params));
+      const data = await client.get("/api/v3/history", params);
+      const d = data as any;
+      if (d.records) {
+        d.records = d.records.map((r: any) => slim(r, ["id", "movieId", "sourceTitle", "date", "eventType", "quality"]));
+      }
+      return ok(d);
     },
   );
 
@@ -125,7 +161,16 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
     `${p}_get_blocklist`,
     `Get blocklist in ${p}`,
     {},
-    async () => ok(await client.get("/api/v3/blocklist")),
+    async () => {
+      const data = await client.get("/api/v3/blocklist");
+      const d = data as any;
+      if (d.records) {
+        d.records = d.records.map((r: any) => slim(r, ["id", "movieId", "sourceTitle", "date", "quality"]));
+      } else if (Array.isArray(data)) {
+        return ok((data as any[]).map((r: any) => slim(r, ["id", "movieId", "sourceTitle", "date", "quality"])));
+      }
+      return ok(d);
+    },
   );
 
   server.tool(
@@ -146,7 +191,12 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
         sortDirection,
         monitored: String(monitored),
       };
-      return ok(await client.get("/api/v3/wanted/missing", params));
+      const data = await client.get("/api/v3/wanted/missing", params);
+      const d = data as any;
+      if (d.records) {
+        d.records = d.records.map((r: any) => slim(r, ["id", "title", "year", "tmdbId", "monitored", "status"]));
+      }
+      return ok(d);
     },
   );
 
@@ -175,15 +225,20 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
     `${p}_get_commands`,
     `List running/queued commands in ${p}`,
     {},
-    async () => ok(await client.get("/api/v3/command")),
+    async () => {
+      const data: any[] = await client.get("/api/v3/command");
+      return ok(data.map((c: any) => slim(c, ["id", "name", "status", "started", "ended"])));
+    },
   );
 
   server.tool(
     `${p}_get_rename_list`,
     `Preview rename for a movie in ${p}`,
     { movieId: z.number().describe("Movie ID to preview rename for") },
-    async ({ movieId }) =>
-      ok(await client.get("/api/v3/rename", { movieId: String(movieId) })),
+    async ({ movieId }) => {
+      const data: any[] = await client.get("/api/v3/rename", { movieId: String(movieId) });
+      return ok(data.map((r: any) => slim(r, ["movieId", "existingPath", "newPath"])));
+    },
   );
 
   server.tool(
@@ -204,7 +259,12 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
         sortDirection,
       };
       if (level) params.level = level;
-      return ok(await client.get("/api/v3/log", params));
+      const data = await client.get("/api/v3/log", params);
+      const d = data as any;
+      if (d.records) {
+        d.records = d.records.map((r: any) => slim(r, ["time", "level", "logger", "message"]));
+      }
+      return ok(d);
     },
   );
 
@@ -212,30 +272,40 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
     `${p}_get_credits`,
     `Get credits/cast for a movie in ${p}`,
     { movieId: z.number().describe("Movie ID") },
-    async ({ movieId }) =>
-      ok(await client.get("/api/v3/credit", { movieId: String(movieId) })),
+    async ({ movieId }) => {
+      const data: any[] = await client.get("/api/v3/credit", { movieId: String(movieId) });
+      return ok(data.map((c: any) => slim(c, ["personName", "character", "type", "order"])));
+    },
   );
 
   server.tool(
     `${p}_get_extra_files`,
     `Get extra files for a movie in ${p}`,
     { movieId: z.number().describe("Movie ID") },
-    async ({ movieId }) =>
-      ok(await client.get("/api/v3/extrafile", { movieId: String(movieId) })),
+    async ({ movieId }) => {
+      const data: any[] = await client.get("/api/v3/extrafile", { movieId: String(movieId) });
+      return ok(data.map((f: any) => slim(f, ["id", "movieId", "relativePath", "type"])));
+    },
   );
 
   server.tool(
     `${p}_get_import_lists`,
     `List import lists in ${p}`,
     {},
-    async () => ok(await client.get("/api/v3/importlist")),
+    async () => {
+      const data: any[] = await client.get("/api/v3/importlist");
+      return ok(data.map((l: any) => slim(l, ["id", "name", "enabled", "listType"])));
+    },
   );
 
   server.tool(
     `${p}_get_exclusions`,
     `List excluded movies in ${p}`,
     {},
-    async () => ok(await client.get("/api/v3/exclusions")),
+    async () => {
+      const data: any[] = await client.get("/api/v3/exclusions");
+      return ok(data.map((e: any) => slim(e, ["id", "tmdbId", "movieTitle", "movieYear"])));
+    },
   );
 
   // ---------------------------------------------------------------------------
@@ -246,7 +316,11 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
     `${p}_search_movies`,
     `Search for a movie to add to ${p} (lookup)`,
     { term: z.string().describe("Search term (movie name)") },
-    async ({ term }) => ok(await client.get("/api/v3/movie/lookup", { term })),
+    async ({ term }) => {
+      const data: any[] = await client.get("/api/v3/movie/lookup", { term });
+      const results = data.slice(0, 10).map((m: any) => slim(m, ["title", "year", "tmdbId", "imdbId", "status", "studio", "runtime"]));
+      return ok({ total: data.length, results });
+    },
   );
 
   server.tool(

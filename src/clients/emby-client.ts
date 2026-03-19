@@ -30,6 +30,7 @@ export class EmbyClient {
       method,
       headers: { "Content-Type": "application/json" },
       body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!res.ok) {
@@ -55,4 +56,27 @@ export class EmbyClient {
   delete<T = unknown>(path: string) {
     return this.request<T>("DELETE", path);
   }
+
+  /** Resolve a display name to an Emby userId (cached). */
+  private userIdCache: Map<string, string> | null = null;
+
+  async resolveUserId(displayName: string): Promise<string> {
+    if (!this.userIdCache) {
+      const users = await this.get<Array<{ Id: string; Name: string }>>("/emby/Users");
+      this.userIdCache = new Map(users.map((u) => [u.Name, u.Id]));
+    }
+    const id = this.userIdCache.get(displayName);
+    if (!id) throw new Error(`Emby user "${displayName}" not found`);
+    return id;
+  }
+}
+
+/**
+ * Emby config with optional user mapping for auth_level support.
+ */
+export interface EmbyConfig {
+  url: string;
+  api_key: string;
+  default_user?: string;
+  users?: Record<string, string>; // auth_level -> display name
 }

@@ -5,13 +5,26 @@ import { BazarrClient } from "../clients/bazarr-client.js";
 export function registerBazarrTools(server: McpServer, client: BazarrClient, prefix = "bazarr") {
   const p = prefix;
 
+  const ok = (data: unknown) => ({
+    content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+  });
+
+  const slim = (obj: any, keys: string[]) =>
+    keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
+
   server.tool(
     `${p}_get_series`,
     `List all series with subtitle status in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/series");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const raw: any = await client.get("/api/series");
+      const data: any[] = Array.isArray(raw) ? raw : (raw.data ?? []);
+      return ok({
+        total: data.length,
+        items: data.slice(0, 25).map((s: any) =>
+          slim(s, ["sonarrSeriesId", "title", "profileId", "audio_language", "seriesType", "monitored"]),
+        ),
+      });
     },
   );
 
@@ -20,8 +33,13 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
     `Get subtitle details for a specific series in ${p}`,
     { seriesid: z.number().describe("Sonarr series ID") },
     async ({ seriesid }) => {
-      const data = await client.get("/api/series", { seriesid: String(seriesid) });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/series", { seriesid: String(seriesid) });
+      // Keep more fields but remove large embedded arrays
+      if (data && typeof data === "object") {
+        const { subtitles, ...rest } = Array.isArray(data) ? (data[0] ?? {}) : data;
+        return ok(rest);
+      }
+      return ok(data);
     },
   );
 
@@ -30,8 +48,23 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
     `Get episodes with subtitle info for a series in ${p}`,
     { seriesid: z.number().describe("Sonarr series ID") },
     async ({ seriesid }) => {
-      const data = await client.get("/api/episodes", { seriesid: String(seriesid) });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const raw: any = await client.get("/api/episodes", { seriesid: String(seriesid) });
+      const data: any[] = Array.isArray(raw) ? raw : (raw.data ?? []);
+      return ok({
+        total: data.length,
+        items: data.map((ep: any) => ({
+          sonarrEpisodeId: ep.sonarrEpisodeId,
+          season: ep.season,
+          episode: ep.episode,
+          title: ep.title,
+          missing_subtitles: Array.isArray(ep.missing_subtitles)
+            ? ep.missing_subtitles.map((s: any) => typeof s === "object" ? s.name ?? s.code2 : s)
+            : ep.missing_subtitles,
+          subtitles: Array.isArray(ep.subtitles)
+            ? ep.subtitles.map((s: any) => typeof s === "object" ? s.name ?? s.code2 : s)
+            : ep.subtitles,
+        })),
+      });
     },
   );
 
@@ -40,8 +73,14 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
     `List all movies with subtitle status in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/movies");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const raw: any = await client.get("/api/movies");
+      const data: any[] = Array.isArray(raw) ? raw : (raw.data ?? []);
+      return ok({
+        total: data.length,
+        items: data.slice(0, 25).map((m: any) =>
+          slim(m, ["radarrId", "title", "profileId", "audio_language", "monitored", "missing_subtitles"]),
+        ),
+      });
     },
   );
 
@@ -50,8 +89,13 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
     `Get subtitle details for a specific movie in ${p}`,
     { radarrid: z.number().describe("Radarr movie ID") },
     async ({ radarrid }) => {
-      const data = await client.get("/api/movies", { radarrid: String(radarrid) });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/movies", { radarrid: String(radarrid) });
+      // Keep more fields but remove large embedded arrays
+      if (data && typeof data === "object") {
+        const { subtitles, ...rest } = Array.isArray(data) ? (data[0] ?? {}) : data;
+        return ok(rest);
+      }
+      return ok(data);
     },
   );
 
@@ -60,8 +104,14 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
     `Get episodes with missing subtitles in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/episodes/wanted");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const raw: any = await client.get("/api/episodes/wanted");
+      const data: any[] = Array.isArray(raw) ? raw : (raw.data ?? []);
+      return ok({
+        total: data.length,
+        items: data.slice(0, 25).map((ep: any) =>
+          slim(ep, ["sonarrSeriesId", "sonarrEpisodeId", "title", "season", "episode", "missing_subtitles"]),
+        ),
+      });
     },
   );
 
@@ -70,8 +120,14 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
     `Get movies with missing subtitles in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/movies/wanted");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const raw: any = await client.get("/api/movies/wanted");
+      const data: any[] = Array.isArray(raw) ? raw : (raw.data ?? []);
+      return ok({
+        total: data.length,
+        items: data.slice(0, 25).map((m: any) =>
+          slim(m, ["radarrId", "title", "missing_subtitles"]),
+        ),
+      });
     },
   );
 
@@ -91,7 +147,7 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
         forced,
         hi,
       });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -111,7 +167,7 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
         forced,
         hi,
       });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -129,7 +185,7 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
         language,
         path: subPath,
       });
-      return { content: [{ type: "text", text: `Subtitle deleted for episode ${sonarrEpisodeId}.` }] };
+      return { content: [{ type: "text" as const, text: `Subtitle deleted for episode ${sonarrEpisodeId}.` }] };
     },
   );
 
@@ -147,7 +203,7 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
         language,
         path: subPath,
       });
-      return { content: [{ type: "text", text: `Subtitle deleted for movie ${radarrId}.` }] };
+      return { content: [{ type: "text" as const, text: `Subtitle deleted for movie ${radarrId}.` }] };
     },
   );
 
@@ -156,8 +212,9 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
     `Get subtitle download history for episodes in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/episodes/history");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const raw: any = await client.get("/api/episodes/history");
+      const data: any[] = Array.isArray(raw) ? raw : (raw.data ?? []);
+      return ok(data.map((h: any) => slim(h, ["id", "action", "language", "provider", "timestamp", "score"])));
     },
   );
 
@@ -166,8 +223,9 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
     `Get subtitle download history for movies in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/movies/history");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const raw: any = await client.get("/api/movies/history");
+      const data: any[] = Array.isArray(raw) ? raw : (raw.data ?? []);
+      return ok(data.map((h: any) => slim(h, ["id", "action", "language", "provider", "timestamp", "score"])));
     },
   );
 
@@ -176,8 +234,9 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
     `List configured subtitle providers in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/providers");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const raw: any = await client.get("/api/providers");
+      const data: any[] = Array.isArray(raw) ? raw : (raw.data ?? []);
+      return ok(data.map((p: any) => slim(p, ["name", "status"])));
     },
   );
 
@@ -185,30 +244,21 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
     `${p}_get_languages`,
     `List available subtitle languages in ${p}`,
     {},
-    async () => {
-      const data = await client.get("/api/system/languages");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    },
+    async () => ok(await client.get("/api/system/languages")),
   );
 
   server.tool(
     `${p}_get_system_status`,
     `Get ${p} system status`,
     {},
-    async () => {
-      const data = await client.get("/api/system/status");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    },
+    async () => ok(await client.get("/api/system/status")),
   );
 
   server.tool(
     `${p}_get_tasks`,
     `List scheduled tasks in ${p}`,
     {},
-    async () => {
-      const data = await client.get("/api/system/tasks");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    },
+    async () => ok(await client.get("/api/system/tasks")),
   );
 
   server.tool(
@@ -217,7 +267,7 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
     { taskName: z.string().describe("Task name to run") },
     async ({ taskName }) => {
       const data = await client.post("/api/system/tasks", { taskName });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 }

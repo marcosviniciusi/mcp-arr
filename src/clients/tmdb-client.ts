@@ -33,6 +33,7 @@ export class TmdbClient {
         Accept: "application/json",
       },
       body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!res.ok) {

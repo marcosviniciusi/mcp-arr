@@ -49,6 +49,7 @@ export class MalClient {
       body: body
         ? new URLSearchParams(body as Record<string, string>).toString()
         : undefined,
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!res.ok) {

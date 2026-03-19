@@ -30,6 +30,7 @@ export class BazarrClient {
         "X-API-KEY": this.apiKey,
       },
       body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!res.ok) {

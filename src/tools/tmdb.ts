@@ -2,6 +2,29 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { TmdbClient } from "../clients/tmdb-client.js";
 
+const slim = (obj: any, keys: string[]) => keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
+
+function slimTmdbResult(item: any): any {
+  const mt = item.media_type;
+  if (mt === "person" || item.known_for_department) {
+    return slim(item, ["id", "name", "known_for_department"]);
+  }
+  if (mt === "tv" || item.first_air_date !== undefined) {
+    const s = slim(item, ["id", "name", "first_air_date", "vote_average", "overview"]);
+    if (s.overview) s.overview = s.overview.slice(0, 150);
+    return s;
+  }
+  // default: movie
+  const s = slim(item, ["id", "title", "release_date", "vote_average", "overview"]);
+  if (s.overview) s.overview = s.overview.slice(0, 150);
+  return s;
+}
+
+function slimResultsPage(data: any, limit = 10): any {
+  const results = (data.results ?? []).slice(0, limit).map(slimTmdbResult);
+  return { page: data.page, total_pages: data.total_pages, total_results: data.total_results, results };
+}
+
 export function registerTmdbTools(server: McpServer, client: TmdbClient) {
   // ── Search ────────────────────────────────────────────────────
 
@@ -15,7 +38,7 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
     },
     async ({ query, page, language }) => {
       const data = await client.get("/search/multi", { query, page: String(page), language });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(slimResultsPage(data), null, 2) }] };
     },
   );
 
@@ -32,7 +55,7 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
       const params: Record<string, string> = { query, page: String(page), language };
       if (year) params.year = String(year);
       const data = await client.get("/search/movie", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(slimResultsPage(data), null, 2) }] };
     },
   );
 
@@ -49,7 +72,7 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
       const params: Record<string, string> = { query, page: String(page), language };
       if (first_air_date_year) params.first_air_date_year = String(first_air_date_year);
       const data = await client.get("/search/tv", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(slimResultsPage(data), null, 2) }] };
     },
   );
 
@@ -63,7 +86,7 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
     },
     async ({ query, page, language }) => {
       const data = await client.get("/search/person", { query, page: String(page), language });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(slimResultsPage(data), null, 2) }] };
     },
   );
 
@@ -77,8 +100,12 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
       language: z.string().optional().default("en-US"),
     },
     async ({ movieId, language }) => {
-      const data = await client.get(`/movie/${movieId}`, { language, append_to_response: "credits,videos,keywords" });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get(`/movie/${movieId}`, { language, append_to_response: "credits,videos,keywords" });
+      const s = slim(data, ["id", "title", "release_date", "runtime", "vote_average", "overview", "genres", "status", "budget", "revenue", "production_companies"]);
+      if (s.overview) s.overview = s.overview.slice(0, 300);
+      if (Array.isArray(s.genres)) s.genres = s.genres.map((g: any) => g.name);
+      if (Array.isArray(s.production_companies)) s.production_companies = s.production_companies.map((c: any) => c.name);
+      return { content: [{ type: "text", text: JSON.stringify(s, null, 2) }] };
     },
   );
 
@@ -90,8 +117,12 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
       language: z.string().optional().default("en-US"),
     },
     async ({ tvId, language }) => {
-      const data = await client.get(`/tv/${tvId}`, { language, append_to_response: "credits,videos,keywords" });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get(`/tv/${tvId}`, { language, append_to_response: "credits,videos,keywords" });
+      const s = slim(data, ["id", "name", "first_air_date", "status", "vote_average", "overview", "genres", "number_of_seasons", "number_of_episodes", "networks"]);
+      if (s.overview) s.overview = s.overview.slice(0, 300);
+      if (Array.isArray(s.genres)) s.genres = s.genres.map((g: any) => g.name);
+      if (Array.isArray(s.networks)) s.networks = s.networks.map((n: any) => n.name);
+      return { content: [{ type: "text", text: JSON.stringify(s, null, 2) }] };
     },
   );
 
@@ -103,8 +134,10 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
       language: z.string().optional().default("en-US"),
     },
     async ({ personId, language }) => {
-      const data = await client.get(`/person/${personId}`, { language, append_to_response: "combined_credits" });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get(`/person/${personId}`, { language, append_to_response: "combined_credits" });
+      const s = slim(data, ["id", "name", "birthday", "deathday", "known_for_department", "biography", "place_of_birth"]);
+      if (s.biography) s.biography = s.biography.slice(0, 300);
+      return { content: [{ type: "text", text: JSON.stringify(s, null, 2) }] };
     },
   );
 
@@ -118,7 +151,7 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
     },
     async ({ mediaType, timeWindow, language }) => {
       const data = await client.get(`/trending/${mediaType}/${timeWindow}`, { language });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(slimResultsPage(data), null, 2) }] };
     },
   );
 
@@ -131,7 +164,7 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
     },
     async ({ page, language }) => {
       const data = await client.get("/movie/popular", { page: String(page), language });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(slimResultsPage(data), null, 2) }] };
     },
   );
 
@@ -144,7 +177,7 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
     },
     async ({ page, language }) => {
       const data = await client.get("/tv/popular", { page: String(page), language });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(slimResultsPage(data), null, 2) }] };
     },
   );
 
@@ -156,8 +189,10 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
       language: z.string().optional().default("en-US"),
     },
     async ({ movieId, language }) => {
-      const data = await client.get(`/movie/${movieId}/credits`, { language });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get(`/movie/${movieId}/credits`, { language });
+      const cast = (data.cast ?? []).slice(0, 15).map((c: any) => slim(c, ["id", "name", "character", "order"]));
+      const crew = (data.crew ?? []).slice(0, 10).map((c: any) => slim(c, ["id", "name", "job", "department"]));
+      return { content: [{ type: "text", text: JSON.stringify({ id: data.id, cast, crew }, null, 2) }] };
     },
   );
 
@@ -169,8 +204,10 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
       language: z.string().optional().default("en-US"),
     },
     async ({ tvId, language }) => {
-      const data = await client.get(`/tv/${tvId}/credits`, { language });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get(`/tv/${tvId}/credits`, { language });
+      const cast = (data.cast ?? []).slice(0, 15).map((c: any) => slim(c, ["id", "name", "character", "order"]));
+      const crew = (data.crew ?? []).slice(0, 10).map((c: any) => slim(c, ["id", "name", "job", "department"]));
+      return { content: [{ type: "text", text: JSON.stringify({ id: data.id, cast, crew }, null, 2) }] };
     },
   );
 
@@ -185,7 +222,7 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
     },
     async ({ mediaType, mediaId, page, language }) => {
       const data = await client.get(`/${mediaType}/${mediaId}/recommendations`, { page: String(page), language });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(slimResultsPage(data), null, 2) }] };
     },
   );
 
@@ -225,7 +262,7 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
       if (vote_average_lte !== undefined) params["vote_average.lte"] = String(vote_average_lte);
       if (with_original_language) params.with_original_language = with_original_language;
       const data = await client.get("/discover/movie", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(slimResultsPage(data), null, 2) }] };
     },
   );
 
@@ -248,7 +285,7 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
       if (vote_average_gte !== undefined) params["vote_average.gte"] = String(vote_average_gte);
       if (with_original_language) params.with_original_language = with_original_language;
       const data = await client.get("/discover/tv", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(slimResultsPage(data), null, 2) }] };
     },
   );
 

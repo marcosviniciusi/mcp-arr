@@ -2,6 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { JellyfinClient } from "../clients/jellyfin-client.js";
 
+const slim = (obj: any, keys: string[]) => keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
+
 export function registerJellyfinTools(server: McpServer, client: JellyfinClient, prefix = "jellyfin") {
   const p = prefix;
 
@@ -40,8 +42,13 @@ export function registerJellyfinTools(server: McpServer, client: JellyfinClient,
         Recursive: "true",
       };
       if (mediaTypes) params.IncludeItemTypes = mediaTypes;
-      const data = await client.get("/Items", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/Items", params);
+      const items = (data.Items ?? []).map((i: any) => {
+        const s = slim(i, ["Name", "Id", "Type", "ProductionYear", "Overview"]);
+        if (s.Overview) s.Overview = s.Overview.slice(0, 150);
+        return s;
+      });
+      return { content: [{ type: "text", text: JSON.stringify({ TotalRecordCount: data.TotalRecordCount, Items: items }, null, 2) }] };
     },
   );
 
@@ -50,8 +57,11 @@ export function registerJellyfinTools(server: McpServer, client: JellyfinClient,
     `Get details of a specific ${p} item`,
     { itemId: z.string().describe("Item ID") },
     async ({ itemId }) => {
-      const data = await client.get(`/Items/${itemId}`);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get(`/Items/${itemId}`);
+      const s = slim(data, ["Name", "Id", "Type", "ProductionYear", "Overview", "CommunityRating", "OfficialRating", "Genres", "Studios", "People"]);
+      if (s.Overview) s.Overview = s.Overview.slice(0, 300);
+      if (Array.isArray(s.People)) s.People = s.People.map((p: any) => slim(p, ["Name", "Role", "Type"]));
+      return { content: [{ type: "text", text: JSON.stringify(s, null, 2) }] };
     },
   );
 
@@ -70,8 +80,9 @@ export function registerJellyfinTools(server: McpServer, client: JellyfinClient,
         Recursive: "true",
       };
       if (parentId) params.ParentId = parentId;
-      const data = await client.get("/Items/Latest", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/Items/Latest", params);
+      const items = (Array.isArray(data) ? data : []).map((i: any) => slim(i, ["Name", "Id", "Type", "ProductionYear", "DateCreated"]));
+      return { content: [{ type: "text", text: JSON.stringify(items, null, 2) }] };
     },
   );
 
@@ -95,8 +106,9 @@ export function registerJellyfinTools(server: McpServer, client: JellyfinClient,
         StartIndex: String(startIndex),
       };
       if (parentId) params.ParentId = parentId;
-      const data = await client.get("/Items", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/Items", params);
+      const items = (data.Items ?? []).map((i: any) => slim(i, ["Name", "Id", "ProductionYear", "CommunityRating", "OfficialRating", "HasSubtitles"]));
+      return { content: [{ type: "text", text: JSON.stringify({ TotalRecordCount: data.TotalRecordCount, Items: items }, null, 2) }] };
     },
   );
 
@@ -120,8 +132,9 @@ export function registerJellyfinTools(server: McpServer, client: JellyfinClient,
         StartIndex: String(startIndex),
       };
       if (parentId) params.ParentId = parentId;
-      const data = await client.get("/Items", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/Items", params);
+      const items = (data.Items ?? []).map((i: any) => slim(i, ["Name", "Id", "ProductionYear", "Status", "CommunityRating"]));
+      return { content: [{ type: "text", text: JSON.stringify({ TotalRecordCount: data.TotalRecordCount, Items: items }, null, 2) }] };
     },
   );
 
@@ -139,8 +152,13 @@ export function registerJellyfinTools(server: McpServer, client: JellyfinClient,
         Recursive: "true",
       };
       if (seasonId) params.SeasonId = seasonId;
-      const data = await client.get("/Items", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/Items", params);
+      const items = (data.Items ?? []).map((i: any) => {
+        const s = slim(i, ["Name", "Id", "IndexNumber", "ParentIndexNumber", "PremiereDate", "Overview"]);
+        if (s.Overview) s.Overview = s.Overview.slice(0, 150);
+        return s;
+      });
+      return { content: [{ type: "text", text: JSON.stringify({ TotalRecordCount: data.TotalRecordCount, Items: items }, null, 2) }] };
     },
   );
 
@@ -149,8 +167,13 @@ export function registerJellyfinTools(server: McpServer, client: JellyfinClient,
     `Get active ${p} sessions (who is watching)`,
     {},
     async () => {
-      const data = await client.get("/Sessions");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/Sessions");
+      const items = (Array.isArray(data) ? data : []).map((s: any) => {
+        const r = slim(s, ["Id", "UserName", "Client", "DeviceName", "NowPlayingItem"]);
+        if (r.NowPlayingItem) r.NowPlayingItem = slim(r.NowPlayingItem, ["Name", "Type"]);
+        return r;
+      });
+      return { content: [{ type: "text", text: JSON.stringify(items, null, 2) }] };
     },
   );
 
@@ -162,11 +185,12 @@ export function registerJellyfinTools(server: McpServer, client: JellyfinClient,
       startIndex: z.number().optional().default(0),
     },
     async ({ limit, startIndex }) => {
-      const data = await client.get("/System/ActivityLog/Entries", {
+      const data: any = await client.get("/System/ActivityLog/Entries", {
         Limit: String(limit),
         StartIndex: String(startIndex),
       });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const items = (data.Items ?? []).map((i: any) => slim(i, ["Id", "Name", "Type", "Date", "Severity"]));
+      return { content: [{ type: "text", text: JSON.stringify(items, null, 2) }] };
     },
   );
 

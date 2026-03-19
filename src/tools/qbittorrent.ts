@@ -2,6 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { QBittorrentClient } from "../clients/qbittorrent-client.js";
 
+const slim = (obj: any, keys: string[]) => keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
+
 export function registerQBittorrentTools(server: McpServer, client: QBittorrentClient) {
   server.tool(
     "qbt_get_torrents",
@@ -22,8 +24,10 @@ export function registerQBittorrentTools(server: McpServer, client: QBittorrentC
       if (sort) params.sort = sort;
       const qs = new URLSearchParams(params).toString();
       const path = `/api/v2/torrents/info${qs ? `?${qs}` : ""}`;
-      const data = await client.getJson(path);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.getJson(path);
+      const arr = Array.isArray(data) ? data : [];
+      const items = arr.slice(0, 50).map((t: any) => slim(t, ["name", "hash", "size", "progress", "state", "dlspeed", "upspeed", "category", "added_on", "eta"]));
+      return { content: [{ type: "text", text: JSON.stringify({ total: arr.length, items }, null, 2) }] };
     },
   );
 

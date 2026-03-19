@@ -5,6 +5,13 @@ import { ArrClient } from "../clients/arr-client.js";
 export function registerLidarrTools(server: McpServer, client: ArrClient, prefix = "lidarr") {
   const p = prefix;
 
+  const ok = (data: unknown) => ({
+    content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+  });
+
+  const slim = (obj: any, keys: string[]) =>
+    keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
+
   // ── Read Tools ──────────────────────────────────────────────────────
 
   server.tool(
@@ -12,8 +19,13 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     `List all artists in ${p} library`,
     {},
     async () => {
-      const data = await client.get("/api/v1/artist");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/artist");
+      return ok({
+        total: data.length,
+        items: data.slice(0, 25).map((a: any) =>
+          slim(a, ["id", "artistName", "foreignArtistId", "status", "monitored", "artistType", "disambiguation"]),
+        ),
+      });
     },
   );
 
@@ -23,7 +35,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     { artistId: z.number().describe("Artist ID") },
     async ({ artistId }) => {
       const data = await client.get(`/api/v1/artist/${artistId}`);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(slim(data, ["id", "artistName", "foreignArtistId", "status", "monitored", "artistType", "overview", "path", "qualityProfileId", "metadataProfileId", "statistics"]));
     },
   );
 
@@ -34,8 +46,13 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     async ({ artistId }) => {
       const params: Record<string, string> = {};
       if (artistId !== undefined) params.artistId = String(artistId);
-      const data = await client.get("/api/v1/album", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/album", params);
+      return ok({
+        total: data.length,
+        items: data.slice(0, 25).map((a: any) =>
+          slim(a, ["id", "title", "foreignAlbumId", "artistId", "releaseDate", "monitored", "albumType"]),
+        ),
+      });
     },
   );
 
@@ -45,7 +62,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     { albumId: z.number().describe("Album ID") },
     async ({ albumId }) => {
       const data = await client.get(`/api/v1/album/${albumId}`);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(slim(data, ["id", "title", "foreignAlbumId", "artistId", "releaseDate", "monitored", "albumType", "overview", "statistics"]));
     },
   );
 
@@ -54,8 +71,11 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     `Get tracks for an album in ${p}`,
     { albumId: z.number().describe("Album ID to get tracks for") },
     async ({ albumId }) => {
-      const data = await client.get("/api/v1/track", { albumId: String(albumId) });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/track", { albumId: String(albumId) });
+      return ok({
+        total: data.length,
+        items: data.map((t: any) => slim(t, ["id", "title", "trackNumber", "duration", "hasFile"])),
+      });
     },
   );
 
@@ -72,8 +92,8 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
       if (start) params.start = start;
       if (end) params.end = end;
       if (unmonitored !== undefined) params.unmonitored = String(unmonitored);
-      const data = await client.get("/api/v1/calendar", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/calendar", params);
+      return ok(data.map((a: any) => slim(a, ["id", "title", "artistId", "releaseDate", "monitored", "albumType"])));
     },
   );
 
@@ -82,8 +102,9 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     `Get current download queue in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/v1/queue");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/v1/queue");
+      const records = Array.isArray(data) ? data : (data.records ?? []);
+      return ok(records.map((q: any) => slim(q, ["id", "title", "status", "size", "sizeleft", "timeleft", "estimatedCompletionTime"])));
     },
   );
 
@@ -105,8 +126,14 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
         sortDirection,
         includeUnknownArtistItems: String(includeUnknownArtistItems),
       };
-      const data = await client.get("/api/v1/queue", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/v1/queue", params);
+      const records = Array.isArray(data) ? data : (data.records ?? []);
+      return ok({
+        page: data.page,
+        pageSize: data.pageSize,
+        totalRecords: data.totalRecords,
+        records: records.map((q: any) => slim(q, ["id", "title", "status", "size", "sizeleft", "timeleft", "estimatedCompletionTime"])),
+      });
     },
   );
 
@@ -115,8 +142,8 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     `List available quality profiles in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/v1/qualityprofile");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/qualityprofile");
+      return ok(data.map((p: any) => slim(p, ["id", "name"])));
     },
   );
 
@@ -125,8 +152,8 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     `List available metadata profiles in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/v1/metadataprofile");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/metadataprofile");
+      return ok(data.map((p: any) => slim(p, ["id", "name"])));
     },
   );
 
@@ -135,8 +162,8 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     `List configured root folders in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/v1/rootfolder");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/rootfolder");
+      return ok(data.map((f: any) => slim(f, ["id", "path", "freeSpace"])));
     },
   );
 
@@ -144,20 +171,14 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     `${p}_get_system_status`,
     `Get ${p} system status`,
     {},
-    async () => {
-      const data = await client.get("/api/v1/system/status");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    },
+    async () => ok(await client.get("/api/v1/system/status")),
   );
 
   server.tool(
     `${p}_get_tags`,
     `List all tags in ${p}`,
     {},
-    async () => {
-      const data = await client.get("/api/v1/tag");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    },
+    async () => ok(await client.get("/api/v1/tag")),
   );
 
   server.tool(
@@ -178,8 +199,14 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
         sortDirection,
       };
       if (eventType !== undefined) params.eventType = String(eventType);
-      const data = await client.get("/api/v1/history", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/v1/history", params);
+      const records = Array.isArray(data) ? data : (data.records ?? []);
+      return ok({
+        page: data.page,
+        pageSize: data.pageSize,
+        totalRecords: data.totalRecords,
+        records: records.map((h: any) => slim(h, ["id", "artistId", "albumId", "sourceTitle", "date", "eventType", "quality"])),
+      });
     },
   );
 
@@ -201,8 +228,14 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
         sortDirection,
         monitored: String(monitored),
       };
-      const data = await client.get("/api/v1/wanted/missing", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/v1/wanted/missing", params);
+      const records = Array.isArray(data) ? data : (data.records ?? []);
+      return ok({
+        page: data.page,
+        pageSize: data.pageSize,
+        totalRecords: data.totalRecords,
+        records: records.map((a: any) => slim(a, ["id", "title", "artistId", "releaseDate", "monitored"])),
+      });
     },
   );
 
@@ -224,8 +257,14 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
         sortDirection,
         monitored: String(monitored),
       };
-      const data = await client.get("/api/v1/wanted/cutoff", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/v1/wanted/cutoff", params);
+      const records = Array.isArray(data) ? data : (data.records ?? []);
+      return ok({
+        page: data.page,
+        pageSize: data.pageSize,
+        totalRecords: data.totalRecords,
+        records: records.map((a: any) => slim(a, ["id", "title", "artistId", "releaseDate", "monitored"])),
+      });
     },
   );
 
@@ -233,20 +272,14 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     `${p}_get_disk_space`,
     `Get disk space information from ${p}`,
     {},
-    async () => {
-      const data = await client.get("/api/v1/diskspace");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    },
+    async () => ok(await client.get("/api/v1/diskspace")),
   );
 
   server.tool(
     `${p}_get_health`,
     `Get health check results from ${p}`,
     {},
-    async () => {
-      const data = await client.get("/api/v1/health");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    },
+    async () => ok(await client.get("/api/v1/health")),
   );
 
   server.tool(
@@ -254,8 +287,8 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     `Get running commands in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/v1/command");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/command");
+      return ok(data.map((c: any) => slim(c, ["id", "name", "status", "started", "ended"])));
     },
   );
 
@@ -264,8 +297,8 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     `Preview file renames for an artist in ${p}`,
     { artistId: z.number().describe("Artist ID to preview renames for") },
     async ({ artistId }) => {
-      const data = await client.get("/api/v1/rename", { artistId: String(artistId) });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/rename", { artistId: String(artistId) });
+      return ok(data.map((r: any) => slim(r, ["artistId", "existingPath", "newPath"])));
     },
   );
 
@@ -289,8 +322,14 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
       };
       if (filterKey) params.filterKey = filterKey;
       if (filterValue) params.filterValue = filterValue;
-      const data = await client.get("/api/v1/log", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/v1/log", params);
+      const records = Array.isArray(data) ? data : (data.records ?? []);
+      return ok({
+        page: data.page,
+        pageSize: data.pageSize,
+        totalRecords: data.totalRecords,
+        records: records.map((l: any) => slim(l, ["time", "level", "logger", "message"])),
+      });
     },
   );
 
@@ -301,8 +340,13 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     `Search for an artist to add to ${p}`,
     { term: z.string().describe("Search term (artist name)") },
     async ({ term }) => {
-      const data = await client.get("/api/v1/artist/lookup", { term });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/artist/lookup", { term });
+      return ok({
+        total: data.length,
+        results: data.slice(0, 10).map((a: any) =>
+          slim(a, ["artistName", "foreignArtistId", "status", "artistType", "disambiguation"]),
+        ),
+      });
     },
   );
 
@@ -311,8 +355,13 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     `Search for an album in ${p}`,
     { term: z.string().describe("Search term (album name)") },
     async ({ term }) => {
-      const data = await client.get("/api/v1/album/lookup", { term });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/album/lookup", { term });
+      return ok({
+        total: data.length,
+        results: data.slice(0, 10).map((a: any) =>
+          slim(a, ["title", "foreignAlbumId", "artistId", "releaseDate", "albumType"]),
+        ),
+      });
     },
   );
 
@@ -325,7 +374,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
         name: "ArtistSearch",
         artistId,
       });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -338,7 +387,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
         name: "AlbumSearch",
         albumIds,
       });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -371,7 +420,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
         addOptions: { searchForMissingAlbums },
       };
       const data = await client.post("/api/v1/artist", body);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -389,7 +438,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
       if (addImportListExclusion) params.push("addImportListExclusion=true");
       const query = params.length ? `?${params.join("&")}` : "";
       await client.delete(`/api/v1/artist/${artistId}${query}`);
-      return { content: [{ type: "text", text: `Artist ${artistId} deleted.` }] };
+      return { content: [{ type: "text" as const, text: `Artist ${artistId} deleted.` }] };
     },
   );
 
@@ -412,7 +461,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
       if (tags !== undefined) artist.tags = tags;
       if (path !== undefined) artist.path = path;
       const data = await client.put(`/api/v1/artist/${artistId}`, artist);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -427,7 +476,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
       const album = await client.get<Record<string, unknown>>(`/api/v1/album/${albumId}`);
       if (monitored !== undefined) album.monitored = monitored;
       const data = await client.put(`/api/v1/album/${albumId}`, album);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -445,7 +494,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
       if (addImportListExclusion) params.push("addImportListExclusion=true");
       const query = params.length ? `?${params.join("&")}` : "";
       await client.delete(`/api/v1/album/${albumId}${query}`);
-      return { content: [{ type: "text", text: `Album ${albumId} deleted.` }] };
+      return { content: [{ type: "text" as const, text: `Album ${albumId} deleted.` }] };
     },
   );
 
@@ -457,7 +506,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
       const body: Record<string, unknown> = { name: "RefreshArtist" };
       if (artistId !== undefined) body.artistId = artistId;
       const data = await client.post("/api/v1/command", body);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -469,7 +518,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
       const body: Record<string, unknown> = { name: "RescanFolders" };
       if (artistId !== undefined) body.artistId = artistId;
       const data = await client.post("/api/v1/command", body);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -482,7 +531,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
         name: "RenameFiles",
         artistId,
       });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -492,7 +541,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     { label: z.string().describe("Tag label") },
     async ({ label }) => {
       const data = await client.post("/api/v1/tag", { label });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -510,7 +559,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
       params.push(`blocklist=${blocklist}`);
       const query = `?${params.join("&")}`;
       await client.delete(`/api/v1/queue/${queueId}${query}`);
-      return { content: [{ type: "text", text: `Queue item ${queueId} removed.` }] };
+      return { content: [{ type: "text" as const, text: `Queue item ${queueId} removed.` }] };
     },
   );
 
@@ -520,7 +569,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     {},
     async () => {
       const data = await client.post("/api/v1/command", { name: "Backup" });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -530,7 +579,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
     {},
     async () => {
       const data = await client.post("/api/v1/system/restart");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 }

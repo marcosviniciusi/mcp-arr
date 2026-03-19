@@ -7,6 +7,7 @@ import { LoggerProvider, SimpleLogRecordProcessor } from "@opentelemetry/sdk-log
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from "@opentelemetry/semantic-conventions";
+import { createHash } from "node:crypto";
 
 let loggerProvider: LoggerProvider | null = null;
 
@@ -79,7 +80,6 @@ export interface AuditLogEntry {
  * The real token never appears in logs.
  */
 export function hashToken(token: string): string {
-  const { createHash } = require("crypto") as typeof import("crypto");
   return createHash("sha256").update(token).digest("hex").slice(0, 12);
 }
 

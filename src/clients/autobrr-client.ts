@@ -30,6 +30,7 @@ export class AutobrrClient {
         "X-API-Token": this.apiToken,
       },
       body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!res.ok) {

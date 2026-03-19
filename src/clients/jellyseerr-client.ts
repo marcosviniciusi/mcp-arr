@@ -29,6 +29,7 @@ export class JellyseerrClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: this.email, password: this.password }),
       redirect: "manual",
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!res.ok) {
@@ -78,6 +79,7 @@ export class JellyseerrClient {
         method,
         headers: this.getHeaders(),
         body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(60_000),
       });
 
     let res = await doFetch();

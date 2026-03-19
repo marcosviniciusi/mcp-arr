@@ -5,13 +5,20 @@ import { ArrClient } from "../clients/arr-client.js";
 export function registerWhisparrTools(server: McpServer, client: ArrClient, prefix = "whisparr") {
   const p = prefix;
 
+  const ok = (data: unknown) => ({
+    content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+  });
+
+  const slim = (obj: any, keys: string[]) => keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
+
   server.tool(
     `${p}_get_movies`,
     `List all movies in ${p} library`,
     {},
     async () => {
-      const data = await client.get("/api/v3/movie");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v3/movie");
+      const items = data.slice(0, 25).map((m: any) => slim(m, ["id", "title", "year", "tmdbId", "status", "monitored", "hasFile"]));
+      return ok({ total: data.length, items });
     },
   );
 
@@ -21,7 +28,7 @@ export function registerWhisparrTools(server: McpServer, client: ArrClient, pref
     { movieId: z.number().describe("Movie ID") },
     async ({ movieId }) => {
       const data = await client.get(`/api/v3/movie/${movieId}`);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(slim(data, ["id", "title", "year", "tmdbId", "status", "monitored", "hasFile", "overview", "path"]));
     },
   );
 
@@ -30,8 +37,9 @@ export function registerWhisparrTools(server: McpServer, client: ArrClient, pref
     `Search for a movie to add to ${p}`,
     { term: z.string().describe("Search term") },
     async ({ term }) => {
-      const data = await client.get("/api/v3/movie/lookup", { term });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v3/movie/lookup", { term });
+      const results = data.slice(0, 10).map((m: any) => slim(m, ["title", "year", "tmdbId", "status"]));
+      return ok({ total: data.length, results });
     },
   );
 
@@ -52,8 +60,7 @@ export function registerWhisparrTools(server: McpServer, client: ArrClient, pref
         tmdbId, title, qualityProfileId, rootFolderPath, monitored, minimumAvailability,
         addOptions: { searchForMovie },
       };
-      const data = await client.post("/api/v3/movie", body);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(await client.post("/api/v3/movie", body));
     },
   );
 
@@ -67,7 +74,7 @@ export function registerWhisparrTools(server: McpServer, client: ArrClient, pref
     async ({ movieId, deleteFiles }) => {
       const path = deleteFiles ? `/api/v3/movie/${movieId}?deleteFiles=true` : `/api/v3/movie/${movieId}`;
       await client.delete(path);
-      return { content: [{ type: "text", text: `Movie ${movieId} deleted.` }] };
+      return ok({ message: `Movie ${movieId} deleted.` });
     },
   );
 
@@ -75,10 +82,8 @@ export function registerWhisparrTools(server: McpServer, client: ArrClient, pref
     `${p}_search_movie_download`,
     `Trigger a search/download for movies in ${p}`,
     { movieIds: z.array(z.number()).describe("Movie IDs to search") },
-    async ({ movieIds }) => {
-      const data = await client.post("/api/v3/command", { name: "MoviesSearch", movieIds });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    },
+    async ({ movieIds }) =>
+      ok(await client.post("/api/v3/command", { name: "MoviesSearch", movieIds })),
   );
 
   server.tool(
@@ -87,7 +92,14 @@ export function registerWhisparrTools(server: McpServer, client: ArrClient, pref
     {},
     async () => {
       const data = await client.get("/api/v3/queue");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      if (Array.isArray(data)) {
+        return ok(data.map((q: any) => slim(q, ["id", "title", "status", "size", "sizeleft", "timeleft"])));
+      }
+      const d = data as any;
+      if (d.records) {
+        d.records = d.records.map((q: any) => slim(q, ["id", "title", "status", "size", "sizeleft", "timeleft"]));
+      }
+      return ok(d);
     },
   );
 
@@ -96,8 +108,8 @@ export function registerWhisparrTools(server: McpServer, client: ArrClient, pref
     `List quality profiles in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/v3/qualityprofile");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v3/qualityprofile");
+      return ok(data.map((p: any) => slim(p, ["id", "name"])));
     },
   );
 
@@ -106,8 +118,8 @@ export function registerWhisparrTools(server: McpServer, client: ArrClient, pref
     `List root folders in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/v3/rootfolder");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v3/rootfolder");
+      return ok(data.map((f: any) => slim(f, ["id", "path", "freeSpace"])));
     },
   );
 
@@ -115,9 +127,6 @@ export function registerWhisparrTools(server: McpServer, client: ArrClient, pref
     `${p}_get_system_status`,
     `Get ${p} system status`,
     {},
-    async () => {
-      const data = await client.get("/api/v3/system/status");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    },
+    async () => ok(await client.get("/api/v3/system/status")),
   );
 }

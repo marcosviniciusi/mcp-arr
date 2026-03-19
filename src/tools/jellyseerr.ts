@@ -2,6 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import type { JellyseerrClient } from "../clients/jellyseerr-client.js";
 
+const slim = (obj: any, keys: string[]) => keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
+
 export function registerJellyseerrTools(server: McpServer, getClient: () => JellyseerrClient) {
   server.tool(
     "jellyseerr_search",
@@ -11,8 +13,13 @@ export function registerJellyseerrTools(server: McpServer, getClient: () => Jell
       page: z.number().optional().default(1).describe("Page number"),
     },
     async ({ query, page }) => {
-      const data = await getClient().get("/search", { query, page: String(page) });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await getClient().get("/search", { query, page: String(page) });
+      const results = (data.results ?? []).map((i: any) => {
+        const s = slim(i, ["id", "mediaType", "title", "name", "releaseDate", "firstAirDate", "overview", "posterPath"]);
+        if (s.overview) s.overview = s.overview.slice(0, 150);
+        return s;
+      });
+      return { content: [{ type: "text", text: JSON.stringify({ page: data.page, totalPages: data.totalPages, totalResults: data.totalResults, results }, null, 2) }] };
     },
   );
 
@@ -25,12 +32,13 @@ export function registerJellyseerrTools(server: McpServer, getClient: () => Jell
       filter: z.enum(["all", "available", "partial", "processing", "pending"]).optional().default("all"),
     },
     async ({ take, skip, filter }) => {
-      const data = await getClient().get("/media", {
+      const data: any = await getClient().get("/media", {
         take: String(take),
         skip: String(skip),
         filter,
       });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const results = (data.results ?? []).map((i: any) => slim(i, ["id", "tmdbId", "tvdbId", "mediaType", "status", "createdAt"]));
+      return { content: [{ type: "text", text: JSON.stringify({ pageInfo: data.pageInfo, results }, null, 2) }] };
     },
   );
 
@@ -39,8 +47,9 @@ export function registerJellyseerrTools(server: McpServer, getClient: () => Jell
     "Get details of a specific media item",
     { mediaId: z.number().describe("Media ID") },
     async ({ mediaId }) => {
-      const data = await getClient().get(`/media/${mediaId}`);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await getClient().get(`/media/${mediaId}`);
+      const s = slim(data, ["id", "tmdbId", "tvdbId", "mediaType", "status", "createdAt", "requests"]);
+      return { content: [{ type: "text", text: JSON.stringify(s, null, 2) }] };
     },
   );
 
@@ -72,13 +81,19 @@ export function registerJellyseerrTools(server: McpServer, getClient: () => Jell
       sort: z.enum(["added", "modified"]).optional().default("added"),
     },
     async ({ take, skip, filter, sort }) => {
-      const data = await getClient().get("/request", {
+      const data: any = await getClient().get("/request", {
         take: String(take),
         skip: String(skip),
         filter,
         sort,
       });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const results = (data.results ?? []).map((i: any) => {
+        const s = slim(i, ["id", "type", "status", "media", "createdAt", "updatedAt", "requestedBy"]);
+        if (s.media) s.media = slim(s.media, ["tmdbId", "tvdbId", "status"]);
+        if (s.requestedBy) s.requestedBy = slim(s.requestedBy, ["id", "displayName"]);
+        return s;
+      });
+      return { content: [{ type: "text", text: JSON.stringify({ pageInfo: data.pageInfo, results }, null, 2) }] };
     },
   );
 
@@ -87,8 +102,12 @@ export function registerJellyseerrTools(server: McpServer, getClient: () => Jell
     "Get details of a specific request",
     { requestId: z.number().describe("Request ID") },
     async ({ requestId }) => {
-      const data = await getClient().get(`/request/${requestId}`);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await getClient().get(`/request/${requestId}`);
+      const s = { ...data };
+      if (s.media) s.media = slim(s.media, ["id", "tmdbId", "tvdbId", "mediaType", "status"]);
+      if (s.requestedBy) s.requestedBy = slim(s.requestedBy, ["id", "displayName", "email"]);
+      if (s.modifiedBy) s.modifiedBy = slim(s.modifiedBy, ["id", "displayName"]);
+      return { content: [{ type: "text", text: JSON.stringify(s, null, 2) }] };
     },
   );
 
@@ -130,11 +149,14 @@ export function registerJellyseerrTools(server: McpServer, getClient: () => Jell
       skip: z.number().optional().default(0),
     },
     async ({ take, skip }) => {
-      const data = await getClient().get("/user", {
+      const data: any = await getClient().get("/user", {
         take: String(take),
         skip: String(skip),
       });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const results = (data.results ?? (Array.isArray(data) ? data : [])).map((i: any) =>
+        slim(i, ["id", "displayName", "email", "requestCount", "movieQuotaLimit", "movieQuotaDays"]),
+      );
+      return { content: [{ type: "text", text: JSON.stringify({ pageInfo: data.pageInfo, results }, null, 2) }] };
     },
   );
 

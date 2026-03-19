@@ -5,6 +5,13 @@ import { ArrClient } from "../clients/arr-client.js";
 export function registerProwlarrTools(server: McpServer, client: ArrClient, prefix = "prowlarr") {
   const p = prefix;
 
+  const ok = (data: unknown) => ({
+    content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+  });
+
+  const slim = (obj: any, keys: string[]) =>
+    keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
+
   // ── Read tools ──────────────────────────────────────────────────────
 
   server.tool(
@@ -12,8 +19,11 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
     `List all configured indexers in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/v1/indexer");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/indexer");
+      return ok({
+        total: data.length,
+        items: data.map((i: any) => slim(i, ["id", "name", "protocol", "enable", "priority", "appProfileId"])),
+      });
     },
   );
 
@@ -23,7 +33,7 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
     { indexerId: z.number().describe("Indexer ID") },
     async ({ indexerId }) => {
       const data = await client.get(`/api/v1/indexer/${indexerId}`);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(slim(data, ["id", "name", "protocol", "enable", "priority", "appProfileId", "fields"]));
     },
   );
 
@@ -31,40 +41,28 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
     `${p}_get_indexer_stats`,
     `Get indexer statistics from ${p}`,
     {},
-    async () => {
-      const data = await client.get("/api/v1/indexerstats");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    },
+    async () => ok(await client.get("/api/v1/indexerstats")),
   );
 
   server.tool(
     `${p}_get_system_status`,
     `Get ${p} system status`,
     {},
-    async () => {
-      const data = await client.get("/api/v1/system/status");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    },
+    async () => ok(await client.get("/api/v1/system/status")),
   );
 
   server.tool(
     `${p}_get_tags`,
     `List all tags in ${p}`,
     {},
-    async () => {
-      const data = await client.get("/api/v1/tag");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    },
+    async () => ok(await client.get("/api/v1/tag")),
   );
 
   server.tool(
     `${p}_get_health`,
     `Get health check results from ${p}`,
     {},
-    async () => {
-      const data = await client.get("/api/v1/health");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    },
+    async () => ok(await client.get("/api/v1/health")),
   );
 
   server.tool(
@@ -72,8 +70,8 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
     `Get application sync profiles from ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/v1/appprofile");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/appprofile");
+      return ok(data.map((p: any) => slim(p, ["id", "name"])));
     },
   );
 
@@ -82,8 +80,8 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
     `List connected applications (Sonarr/Radarr/etc.) in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/v1/applications");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/applications");
+      return ok(data.map((a: any) => slim(a, ["id", "name", "syncLevel", "implementation"])));
     },
   );
 
@@ -92,8 +90,8 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
     `List download clients configured in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/v1/downloadclient");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/downloadclient");
+      return ok(data.map((d: any) => slim(d, ["id", "name", "enable", "protocol", "implementation"])));
     },
   );
 
@@ -113,8 +111,14 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
         sortKey,
         sortDirection,
       };
-      const data = await client.get("/api/v1/history", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/v1/history", params);
+      const records = Array.isArray(data) ? data : (data.records ?? []);
+      return ok({
+        page: data.page,
+        pageSize: data.pageSize,
+        totalRecords: data.totalRecords,
+        records: records.map((h: any) => slim(h, ["id", "indexerId", "sourceTitle", "date", "eventType", "successful"])),
+      });
     },
   );
 
@@ -136,8 +140,14 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
         sortDirection,
       };
       if (level && level !== "all") params.level = level;
-      const data = await client.get("/api/v1/log", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/v1/log", params);
+      const records = Array.isArray(data) ? data : (data.records ?? []);
+      return ok({
+        page: data.page,
+        pageSize: data.pageSize,
+        totalRecords: data.totalRecords,
+        records: records.map((l: any) => slim(l, ["time", "level", "logger", "message"])),
+      });
     },
   );
 
@@ -146,8 +156,8 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
     `Get available indexer types/schemas from ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/v1/indexer/schema");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/indexer/schema");
+      return ok(data.map((s: any) => slim(s, ["name", "implementation", "implementationName", "protocol"])));
     },
   );
 
@@ -169,8 +179,13 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
       };
       if (indexerIds?.length) params.indexerIds = indexerIds.join(",");
       if (categories?.length) params.categories = categories.join(",");
-      const data = await client.get("/api/v1/search", params);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any[] = await client.get("/api/v1/search", params);
+      return ok({
+        total: data.length,
+        results: data.slice(0, 20).map((r: any) =>
+          slim(r, ["title", "indexer", "size", "publishDate", "downloadUrl", "categories", "seeders", "leechers", "indexerId"]),
+        ),
+      });
     },
   );
 
@@ -206,7 +221,7 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
         tags,
       };
       const data = await client.post("/api/v1/indexer", body);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -219,7 +234,7 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
     },
     async ({ indexerId, body }) => {
       const data = await client.put(`/api/v1/indexer/${indexerId}`, body);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -231,7 +246,7 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
     },
     async ({ indexerId }) => {
       await client.delete(`/api/v1/indexer/${indexerId}`);
-      return { content: [{ type: "text", text: `Indexer ${indexerId} deleted.` }] };
+      return { content: [{ type: "text" as const, text: `Indexer ${indexerId} deleted.` }] };
     },
   );
 
@@ -244,7 +259,7 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
     async ({ indexerId }) => {
       const indexer = await client.get(`/api/v1/indexer/${indexerId}`);
       const data = await client.post("/api/v1/indexer/test", indexer);
-      return { content: [{ type: "text", text: JSON.stringify(data ?? { valid: true, message: "Test passed" }, null, 2) }] };
+      return ok(data ?? { valid: true, message: "Test passed" });
     },
   );
 
@@ -252,10 +267,7 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
     `${p}_test_all_indexers`,
     `Test all configured indexers in ${p}`,
     {},
-    async () => {
-      const data = await client.post("/api/v1/indexer/testall");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    },
+    async () => ok(await client.post("/api/v1/indexer/testall")),
   );
 
   server.tool(
@@ -266,7 +278,7 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
     },
     async ({ label }) => {
       const data = await client.post("/api/v1/tag", { label });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -274,10 +286,7 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
     `${p}_sync_app`,
     `Trigger an application sync in ${p} (syncs indexers to connected apps)`,
     {},
-    async () => {
-      const data = await client.post("/api/v1/command", { name: "AppIndexerSync" });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
-    },
+    async () => ok(await client.post("/api/v1/command", { name: "AppIndexerSync" })),
   );
 
   server.tool(
@@ -302,7 +311,7 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
         tags,
       };
       const data = await client.post("/api/v1/applications", body);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -314,7 +323,7 @@ export function registerProwlarrTools(server: McpServer, client: ArrClient, pref
     },
     async ({ applicationId }) => {
       await client.delete(`/api/v1/applications/${applicationId}`);
-      return { content: [{ type: "text", text: `Application ${applicationId} deleted.` }] };
+      return { content: [{ type: "text" as const, text: `Application ${applicationId} deleted.` }] };
     },
   );
 }

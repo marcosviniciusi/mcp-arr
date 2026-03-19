@@ -29,6 +29,7 @@ export class SeerrClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: this.email, password: this.password }),
       redirect: "manual",
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!res.ok) {
@@ -48,7 +49,11 @@ export class SeerrClient {
     };
 
     if (this.authMode === "apikey" && this.apiKey) {
-      headers["X-Api-Key"] = this.apiKey;
+      // Overseerr expects the API key base64-encoded
+      const key = Buffer.from(this.apiKey).toString("base64") === this.apiKey
+        ? this.apiKey  // already base64
+        : Buffer.from(this.apiKey).toString("base64");
+      headers["X-Api-Key"] = key;
     } else if (this.cookie) {
       headers["Cookie"] = this.cookie;
     }
@@ -78,6 +83,7 @@ export class SeerrClient {
         method,
         headers: this.getHeaders(),
         body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(60_000),
       });
 
     let res = await doFetch();

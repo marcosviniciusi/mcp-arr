@@ -2,7 +2,25 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { RyotClient } from "../clients/ryot-client.js";
 
-export function registerRyotTools(server: McpServer, client: RyotClient) {
+const slim = (obj: any, keys: string[]) => keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
+
+const ok = (data: unknown) => ({
+  content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+});
+
+const MEDIA_LOT = z.enum([
+  "ANIME", "AUDIO_BOOK", "BOOK", "COMIC_BOOK", "MANGA",
+  "MOVIE", "MUSIC", "PODCAST", "SHOW", "VIDEO_GAME", "VISUAL_NOVEL",
+]);
+
+const MEDIA_SOURCE = z.enum([
+  "ANILIST", "AUDIBLE", "CUSTOM", "GIANT_BOMB", "GOOGLE_BOOKS",
+  "HARDCOVER", "IGDB", "ITUNES", "LISTENNOTES", "MANGA_UPDATES",
+  "METRON", "MUSIC_BRAINZ", "MYANIMELIST", "OPENLIBRARY",
+  "SPOTIFY", "TMDB", "TVDB", "VNDB", "YOUTUBE_MUSIC",
+]);
+
+export function registerRyotTools(server: McpServer, getClient: () => RyotClient) {
   // ── Search ────────────────────────────────────────────────────
 
   server.tool(
@@ -10,20 +28,26 @@ export function registerRyotTools(server: McpServer, client: RyotClient) {
     "Search media across all types in Ryot (movies, TV, anime, manga, books, games, etc.)",
     {
       query: z.string().describe("Search query"),
-      lot: z.enum(["ANIME", "AUDIO_BOOK", "BOOK", "MANGA", "MOVIE", "PODCAST", "SHOW", "VIDEO_GAME", "VISUAL_NOVEL"])
-        .describe("Media lot/type"),
+      lot: MEDIA_LOT.describe("Media lot/type"),
+      source: MEDIA_SOURCE.describe("Media source. Use TMDB for movies/shows, ANILIST for anime, MYANIMELIST for anime/manga, IGDB for games, AUDIBLE for audiobooks, OPENLIBRARY for books"),
       page: z.number().optional().default(1),
     },
-    async ({ query, lot, page }) => {
-      const data = await client.query(`
+    async ({ query, lot, source, page }) => {
+      const data: any = await getClient().query(`
         query SearchMedia($input: MetadataSearchInput!) {
           metadataSearch(input: $input) {
-            details { total nextPage }
-            items { identifier title image publishYear }
+            response {
+              details { totalItems nextPage }
+              items
+            }
           }
         }
-      `, { input: { search: { query, page }, lot } });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      `, { input: { search: { query, page }, lot, source } });
+      const resp = data?.metadataSearch?.response;
+      if (resp && Array.isArray(resp.items)) {
+        resp.items = resp.items.map((i: any) => slim(i, ["identifier", "title", "image", "publishYear"]));
+      }
+      return ok(data);
     },
   );
 
@@ -36,7 +60,7 @@ export function registerRyotTools(server: McpServer, client: RyotClient) {
       metadataId: z.string().describe("Ryot metadata ID"),
     },
     async ({ metadataId }) => {
-      const data = await client.query(`
+      const data: any = await getClient().query(`
         query GetMediaDetails($metadataId: String!) {
           metadataDetails(metadataId: $metadataId) {
             id lot title description publishYear publishDate
@@ -47,59 +71,69 @@ export function registerRyotTools(server: McpServer, client: RyotClient) {
           }
         }
       `, { metadataId });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const details = data?.metadataDetails;
+      if (details) {
+        if (details.description) details.description = details.description.slice(0, 300);
+        if (details.assets?.images && Array.isArray(details.assets.images)) {
+          details.assets.images = details.assets.images.slice(0, 3);
+        }
+      }
+      return ok(data);
     },
   );
 
   server.tool(
     "ryot_get_media_list",
-    "Get user's media list filtered by type and collection",
+    "Get user's media list filtered by type",
     {
-      lot: z.enum(["ANIME", "AUDIO_BOOK", "BOOK", "MANGA", "MOVIE", "PODCAST", "SHOW", "VIDEO_GAME", "VISUAL_NOVEL"])
-        .optional()
-        .describe("Filter by media type"),
-      page: z.number().optional().default(1),
+      lot: MEDIA_LOT.optional().describe("Filter by media type"),
     },
-    async ({ lot, page }) => {
-      const data = await client.query(`
-        query GetMediaList($input: MediaListInput!) {
-          mediaList(input: $input) {
-            details { total nextPage }
-            items {
-              data { identifier title image publishYear }
-              averageRating
+    async ({ lot }) => {
+      const data: any = await getClient().query(`
+        query GetMediaList($input: UserMetadataListInput!) {
+          userMetadataList(input: $input) {
+            response {
+              details { totalItems nextPage }
+              items
             }
           }
         }
-      `, { input: { page, lot } });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      `, { input: { lot } });
+      const resp = data?.userMetadataList?.response;
+      if (resp && Array.isArray(resp.items)) {
+        resp.items = resp.items.map((i: any) => slim(i, ["identifier", "title", "lot", "publishYear"]));
+      }
+      return ok(data);
     },
   );
 
   server.tool(
     "ryot_get_user_summary",
     "Get user statistics summary (counts, time spent, etc.)",
-    {},
-    async () => {
-      const data = await client.query(`
-        query GetUserSummary {
-          latestUserSummary {
-            calculatedOn
-            media {
-              anime { watched episodes }
-              audioBooks { played items }
-              books { read pages }
-              manga { read chapters }
-              movies { watched }
-              podcasts { played episodes }
-              shows { watched watchedEpisodes watchedSeasons }
-              videoGames { played }
-              visualNovels { played }
+    {
+      startDate: z.string().optional().describe("Start date (YYYY-MM-DD). Defaults to 1 year ago."),
+      endDate: z.string().optional().describe("End date (YYYY-MM-DD). Defaults to today."),
+    },
+    async ({ startDate, endDate }) => {
+      const end = endDate || new Date().toISOString().slice(0, 10);
+      const start = startDate || new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+      const data = await getClient().query(`
+        query GetUserSummary($input: UserAnalyticsInput!) {
+          userAnalytics(input: $input) {
+            activities {
+              totalCount totalDuration itemCount
+              items {
+                day
+                animeCount movieCount showCount bookCount mangaCount
+                podcastCount videoGameCount visualNovelCount audioBookCount
+                totalMovieDuration totalShowDuration totalBookPages
+                totalMetadataCount totalDuration
+              }
             }
           }
         }
-      `);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      `, { input: { dateRange: { startDate: start, endDate: end } } });
+      return ok(data);
     },
   );
 
@@ -108,15 +142,18 @@ export function registerRyotTools(server: McpServer, client: RyotClient) {
     "List all collections",
     {},
     async () => {
-      const data = await client.query(`
+      const data: any = await getClient().query(`
         query GetCollections {
           userCollectionsList {
-            id name description numItems
-            collaborators { user { name } }
+            response { id name description count isDefault }
           }
         }
       `);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const resp = data?.userCollectionsList?.response;
+      if (Array.isArray(resp)) {
+        data.userCollectionsList.response = resp.map((c: any) => slim(c, ["id", "name", "count", "isDefault"]));
+      }
+      return ok(data);
     },
   );
 
@@ -125,18 +162,21 @@ export function registerRyotTools(server: McpServer, client: RyotClient) {
     "Get media currently in progress",
     {},
     async () => {
-      const data = await client.query(`
+      const data: any = await getClient().query(`
         query GetInProgress {
-          mediaList(input: { filter: { general: IN_PROGRESS }, page: 1 }) {
-            details { total }
-            items {
-              data { identifier title image publishYear }
-              averageRating
+          userMetadataList(input: { filter: { general: IN_PROGRESS } }) {
+            response {
+              details { total }
+              items
             }
           }
         }
       `);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const resp = data?.userMetadataList?.response;
+      if (resp && Array.isArray(resp.items)) {
+        resp.items = resp.items.map((i: any) => slim(i, ["identifier", "title", "lot", "publishYear"]));
+      }
+      return ok(data);
     },
   );
 
@@ -144,17 +184,25 @@ export function registerRyotTools(server: McpServer, client: RyotClient) {
 
   server.tool(
     "ryot_add_to_list",
-    "Add media to the user's list",
+    "Add media to a collection (requires creatorUserId)",
     {
+      creatorUserId: z.string().describe("Ryot user ID (owner of the collection)"),
       metadataId: z.string().describe("Ryot metadata ID"),
+      collectionName: z.string().optional().default("Watchlist").describe("Collection name"),
     },
-    async ({ metadataId }) => {
-      const data = await client.mutation(`
-        mutation AddToList($input: AddMediaToCollection!) {
-          addMediaToCollection(input: $input)
+    async ({ creatorUserId, metadataId, collectionName }) => {
+      const data = await getClient().mutation(`
+        mutation AddToCollection($input: ChangeCollectionToEntitiesInput!) {
+          deployAddEntitiesToCollectionJob(input: $input)
         }
-      `, { input: { metadataId, collectionName: "Watchlist" } });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      `, {
+        input: {
+          creatorUserId,
+          collectionName,
+          entities: [{ entityId: metadataId, entityLot: "METADATA" }],
+        },
+      });
+      return ok(data);
     },
   );
 
@@ -164,23 +212,25 @@ export function registerRyotTools(server: McpServer, client: RyotClient) {
     {
       metadataId: z.string().describe("Ryot metadata ID"),
       progress: z.number().min(0).max(100).describe("Progress percentage (0-100)"),
+      lot: MEDIA_LOT.describe("Media type"),
       showSeasonNumber: z.number().optional().describe("Season number (for TV/anime)"),
       showEpisodeNumber: z.number().optional().describe("Episode number (for TV/anime)"),
     },
-    async ({ metadataId, progress, showSeasonNumber, showEpisodeNumber }) => {
-      const data = await client.mutation(`
-        mutation UpdateProgress($input: ProgressUpdateInput!) {
-          deployUpdateMetadataJob(input: $input)
+    async ({ metadataId, progress, lot, showSeasonNumber, showEpisodeNumber }) => {
+      const data = await getClient().mutation(`
+        mutation UpdateProgress($input: [ProgressUpdateInput!]!) {
+          deployBulkMetadataProgressUpdate(input: $input)
         }
       `, {
-        input: {
+        input: [{
           metadataId,
           progress,
+          lot,
           ...(showSeasonNumber !== undefined && { showSeasonNumber }),
           ...(showEpisodeNumber !== undefined && { showEpisodeNumber }),
-        },
+        }],
       });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
@@ -188,16 +238,16 @@ export function registerRyotTools(server: McpServer, client: RyotClient) {
     "ryot_rate_media",
     "Rate a media item",
     {
-      metadataId: z.string().describe("Ryot metadata ID"),
+      entityId: z.string().describe("Ryot metadata ID"),
       rating: z.number().min(0).max(100).describe("Rating (0-100 scale)"),
     },
-    async ({ metadataId, rating }) => {
-      const data = await client.mutation(`
-        mutation PostReview($input: PostReviewInput!) {
-          postReview(input: $input) { id }
+    async ({ entityId, rating }) => {
+      const data = await getClient().mutation(`
+        mutation PostReview($input: CreateOrUpdateReviewInput!) {
+          createOrUpdateReview(input: $input) { id }
         }
-      `, { input: { metadataId, rating } });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      `, { input: { entityId, entityLot: "METADATA", rating } });
+      return ok(data);
     },
   );
 
@@ -205,18 +255,18 @@ export function registerRyotTools(server: McpServer, client: RyotClient) {
     "ryot_post_review",
     "Post a text review for a media item",
     {
-      metadataId: z.string().describe("Ryot metadata ID"),
+      entityId: z.string().describe("Ryot metadata ID"),
       text: z.string().describe("Review text"),
       rating: z.number().min(0).max(100).optional().describe("Rating (0-100 scale)"),
       isSpoiler: z.boolean().optional().default(false).describe("Mark as spoiler"),
     },
-    async ({ metadataId, text, rating, isSpoiler }) => {
-      const data = await client.mutation(`
-        mutation PostReview($input: PostReviewInput!) {
-          postReview(input: $input) { id }
+    async ({ entityId, text, rating, isSpoiler }) => {
+      const data = await getClient().mutation(`
+        mutation PostReview($input: CreateOrUpdateReviewInput!) {
+          createOrUpdateReview(input: $input) { id }
         }
-      `, { input: { metadataId, text, rating, isSpoiler } });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      `, { input: { entityId, entityLot: "METADATA", text, rating, isSpoiler } });
+      return ok(data);
     },
   );
 
@@ -230,49 +280,54 @@ export function registerRyotTools(server: McpServer, client: RyotClient) {
       description: z.string().optional().describe("Collection description"),
     },
     async ({ name, description }) => {
-      const data = await client.mutation(`
+      const data = await getClient().mutation(`
         mutation CreateCollection($input: CreateOrUpdateCollectionInput!) {
           createOrUpdateCollection(input: $input) { id }
         }
       `, { input: { name, description } });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return ok(data);
     },
   );
 
   server.tool(
     "ryot_delete_from_list",
-    "Remove media from a collection",
+    "Remove media from a collection (requires creatorUserId)",
     {
+      creatorUserId: z.string().describe("Ryot user ID (owner of the collection)"),
       metadataId: z.string().describe("Ryot metadata ID"),
       collectionName: z.string().optional().default("Watchlist").describe("Collection name"),
     },
-    async ({ metadataId, collectionName }) => {
-      const data = await client.mutation(`
-        mutation RemoveFromCollection($input: AddMediaToCollection!) {
-          removeMediaFromCollection(input: $input)
+    async ({ creatorUserId, metadataId, collectionName }) => {
+      const data = await getClient().mutation(`
+        mutation RemoveFromCollection($input: ChangeCollectionToEntitiesInput!) {
+          deployRemoveEntitiesFromCollectionJob(input: $input)
         }
-      `, { input: { metadataId, collectionName } });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      `, {
+        input: {
+          creatorUserId,
+          collectionName,
+          entities: [{ entityId: metadataId, entityLot: "METADATA" }],
+        },
+      });
+      return ok(data);
     },
   );
 
   server.tool(
     "ryot_import_from_source",
-    "Import media data from an external source (MAL, Trakt, Goodreads, etc.)",
+    "Import/commit a media item from an external source into Ryot",
     {
-      source: z.enum(["MAL", "TRAKT", "GOODREADS", "TMDB", "IGDB", "OPEN_LIBRARY", "AUDIBLE"])
-        .describe("Import source"),
-      identifier: z.string().describe("External ID from the source"),
-      lot: z.enum(["ANIME", "AUDIO_BOOK", "BOOK", "MANGA", "MOVIE", "PODCAST", "SHOW", "VIDEO_GAME", "VISUAL_NOVEL"])
-        .describe("Media type"),
+      entityId: z.string().describe("External ID from the source"),
+      entityLot: z.enum(["METADATA", "METADATA_GROUP", "PERSON"]).default("METADATA")
+        .describe("Entity type"),
     },
-    async ({ source, identifier, lot }) => {
-      const data = await client.mutation(`
-        mutation CommitMedia($input: CommitMediaInput!) {
-          commitMetadata(input: $input) { id }
+    async ({ entityId, entityLot }) => {
+      const data = await getClient().mutation(`
+        mutation ImportMedia($input: EntityWithLotInput!) {
+          deployUpdateMediaEntityJob(input: $input)
         }
-      `, { input: { identifier, lot, source } });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      `, { input: { entityId, entityLot } });
+      return ok(data);
     },
   );
 }

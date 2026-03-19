@@ -2,6 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { AutobrrClient } from "../clients/autobrr-client.js";
 
+const slim = (obj: any, keys: string[]) => keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
+
 export function registerAutobrrTools(server: McpServer, client: AutobrrClient, prefix = "autobrr") {
   const p = prefix;
 
@@ -10,8 +12,10 @@ export function registerAutobrrTools(server: McpServer, client: AutobrrClient, p
     `List all filters in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/filters");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/filters");
+      const arr = Array.isArray(data) ? data : [];
+      const items = arr.map((i: any) => slim(i, ["id", "name", "enabled", "priority", "created_at"]));
+      return { content: [{ type: "text", text: JSON.stringify({ total: arr.length, items }, null, 2) }] };
     },
   );
 
@@ -54,8 +58,10 @@ export function registerAutobrrTools(server: McpServer, client: AutobrrClient, p
     `List configured indexers in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/indexer");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/indexer");
+      const arr = Array.isArray(data) ? data : [];
+      const items = arr.map((i: any) => slim(i, ["id", "name", "enabled", "implementation"]));
+      return { content: [{ type: "text", text: JSON.stringify({ total: arr.length, items }, null, 2) }] };
     },
   );
 
@@ -64,8 +70,10 @@ export function registerAutobrrTools(server: McpServer, client: AutobrrClient, p
     `List IRC networks in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/irc");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/irc");
+      const arr = Array.isArray(data) ? data : [];
+      const items = arr.map((i: any) => slim(i, ["id", "name", "enabled", "server", "connected"]));
+      return { content: [{ type: "text", text: JSON.stringify({ total: arr.length, items }, null, 2) }] };
     },
   );
 
@@ -77,8 +85,10 @@ export function registerAutobrrTools(server: McpServer, client: AutobrrClient, p
       offset: z.number().optional().default(0).describe("Offset for pagination"),
     },
     async ({ limit, offset }) => {
-      const data = await client.get("/api/release", { limit: String(limit), offset: String(offset) });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/release", { limit: String(Math.min(limit, 25)), offset: String(offset) });
+      const arr = Array.isArray(data) ? data : (data?.data ?? []);
+      const items = arr.slice(0, 25).map((i: any) => slim(i, ["id", "name", "indexer", "size", "timestamp", "filter"]));
+      return { content: [{ type: "text", text: JSON.stringify({ total: Array.isArray(data) ? data.length : (data?.count ?? items.length), items }, null, 2) }] };
     },
   );
 
@@ -97,8 +107,10 @@ export function registerAutobrrTools(server: McpServer, client: AutobrrClient, p
     `List RSS/Torznab feeds in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/feeds");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/feeds");
+      const arr = Array.isArray(data) ? data : [];
+      const items = arr.map((i: any) => slim(i, ["id", "name", "enabled", "type", "url"]));
+      return { content: [{ type: "text", text: JSON.stringify({ total: arr.length, items }, null, 2) }] };
     },
   );
 
@@ -107,8 +119,10 @@ export function registerAutobrrTools(server: McpServer, client: AutobrrClient, p
     `List download clients configured in ${p}`,
     {},
     async () => {
-      const data = await client.get("/api/download_clients");
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/api/download_clients");
+      const arr = Array.isArray(data) ? data : [];
+      const items = arr.map((i: any) => slim(i, ["id", "name", "enabled", "type"]));
+      return { content: [{ type: "text", text: JSON.stringify({ total: arr.length, items }, null, 2) }] };
     },
   );
 }

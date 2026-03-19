@@ -2,6 +2,32 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { MalClient } from "../clients/mal-client.js";
 
+const slim = (obj: any, keys: string[]) => keys.reduce((r: any, k) => { if (obj[k] !== undefined) r[k] = obj[k]; return r; }, {});
+
+function slimAnimeNode(node: any): any {
+  const s = slim(node, ["id", "title", "media_type", "status", "num_episodes", "mean"]);
+  return s;
+}
+
+function slimMangaNode(node: any): any {
+  const s = slim(node, ["id", "title", "media_type", "status", "num_chapters", "mean"]);
+  return s;
+}
+
+function slimAnimeDetails(data: any): any {
+  const s = slim(data, ["id", "title", "main_picture", "synopsis", "mean", "rank", "popularity", "status", "num_episodes", "start_date", "end_date", "genres"]);
+  if (s.synopsis) s.synopsis = s.synopsis.slice(0, 300);
+  if (Array.isArray(s.genres)) s.genres = s.genres.map((g: any) => g.name);
+  return s;
+}
+
+function slimMangaDetails(data: any): any {
+  const s = slim(data, ["id", "title", "main_picture", "synopsis", "mean", "rank", "popularity", "status", "num_chapters", "num_volumes", "start_date", "end_date", "genres"]);
+  if (s.synopsis) s.synopsis = s.synopsis.slice(0, 300);
+  if (Array.isArray(s.genres)) s.genres = s.genres.map((g: any) => g.name);
+  return s;
+}
+
 export function registerMalTools(server: McpServer, client: MalClient) {
   const ANIME_FIELDS = "id,title,main_picture,alternative_titles,start_date,end_date,synopsis,mean,rank,popularity,num_list_users,num_scoring_users,media_type,status,genres,num_episodes,source,rating,studios";
   const MANGA_FIELDS = "id,title,main_picture,alternative_titles,start_date,end_date,synopsis,mean,rank,popularity,num_list_users,num_scoring_users,media_type,status,genres,num_volumes,num_chapters,authors";
@@ -17,13 +43,14 @@ export function registerMalTools(server: McpServer, client: MalClient) {
       offset: z.number().optional().default(0),
     },
     async ({ q, limit, offset }) => {
-      const data = await client.get("/anime", {
+      const data: any = await client.get("/anime", {
         q,
         limit: String(limit),
         offset: String(offset),
         fields: ANIME_FIELDS,
       });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const items = (data.data ?? []).map((entry: any) => slimAnimeNode(entry.node));
+      return { content: [{ type: "text", text: JSON.stringify({ data: items }, null, 2) }] };
     },
   );
 
@@ -36,13 +63,14 @@ export function registerMalTools(server: McpServer, client: MalClient) {
       offset: z.number().optional().default(0),
     },
     async ({ q, limit, offset }) => {
-      const data = await client.get("/manga", {
+      const data: any = await client.get("/manga", {
         q,
         limit: String(limit),
         offset: String(offset),
         fields: MANGA_FIELDS,
       });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const items = (data.data ?? []).map((entry: any) => slimMangaNode(entry.node));
+      return { content: [{ type: "text", text: JSON.stringify({ data: items }, null, 2) }] };
     },
   );
 
@@ -54,7 +82,7 @@ export function registerMalTools(server: McpServer, client: MalClient) {
     { animeId: z.number().describe("MAL anime ID") },
     async ({ animeId }) => {
       const data = await client.get(`/anime/${animeId}`, { fields: ANIME_FIELDS });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(slimAnimeDetails(data), null, 2) }] };
     },
   );
 
@@ -64,7 +92,7 @@ export function registerMalTools(server: McpServer, client: MalClient) {
     { mangaId: z.number().describe("MAL manga ID") },
     async ({ mangaId }) => {
       const data = await client.get(`/manga/${mangaId}`, { fields: MANGA_FIELDS });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      return { content: [{ type: "text", text: JSON.stringify(slimMangaDetails(data), null, 2) }] };
     },
   );
 
@@ -78,12 +106,13 @@ export function registerMalTools(server: McpServer, client: MalClient) {
       limit: z.number().optional().default(25),
     },
     async ({ year, season, sort, limit }) => {
-      const data = await client.get(`/anime/season/${year}/${season}`, {
+      const data: any = await client.get(`/anime/season/${year}/${season}`, {
         sort,
         limit: String(limit),
         fields: ANIME_FIELDS,
       });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const items = (data.data ?? []).map((entry: any) => slimAnimeNode(entry.node));
+      return { content: [{ type: "text", text: JSON.stringify({ data: items }, null, 2) }] };
     },
   );
 
@@ -98,12 +127,13 @@ export function registerMalTools(server: McpServer, client: MalClient) {
       limit: z.number().optional().default(25),
     },
     async ({ ranking_type, limit }) => {
-      const data = await client.get("/anime/ranking", {
+      const data: any = await client.get("/anime/ranking", {
         ranking_type,
         limit: String(limit),
         fields: ANIME_FIELDS,
       });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const items = (data.data ?? []).map((entry: any) => ({ ...slimAnimeNode(entry.node), ranking: entry.ranking }));
+      return { content: [{ type: "text", text: JSON.stringify({ data: items }, null, 2) }] };
     },
   );
 
@@ -118,12 +148,13 @@ export function registerMalTools(server: McpServer, client: MalClient) {
       limit: z.number().optional().default(25),
     },
     async ({ ranking_type, limit }) => {
-      const data = await client.get("/manga/ranking", {
+      const data: any = await client.get("/manga/ranking", {
         ranking_type,
         limit: String(limit),
         fields: MANGA_FIELDS,
       });
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const items = (data.data ?? []).map((entry: any) => ({ ...slimMangaNode(entry.node), ranking: entry.ranking }));
+      return { content: [{ type: "text", text: JSON.stringify({ data: items }, null, 2) }] };
     },
   );
 
@@ -137,8 +168,9 @@ export function registerMalTools(server: McpServer, client: MalClient) {
       if (!client.hasUserAuth) {
         return { content: [{ type: "text", text: "Error: Anime suggestions require user authentication (access_token)." }], isError: true };
       }
-      const data = await client.get("/anime/suggestions", { limit: String(limit), fields: ANIME_FIELDS }, true);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/anime/suggestions", { limit: String(limit), fields: ANIME_FIELDS }, true);
+      const items = (data.data ?? []).map((entry: any) => slimAnimeNode(entry.node));
+      return { content: [{ type: "text", text: JSON.stringify({ data: items }, null, 2) }] };
     },
   );
 
@@ -158,8 +190,12 @@ export function registerMalTools(server: McpServer, client: MalClient) {
       }
       const params: Record<string, string> = { sort, limit: String(limit), fields: "list_status," + ANIME_FIELDS };
       if (status) params.status = status;
-      const data = await client.get("/users/@me/animelist", params, true);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/users/@me/animelist", params, true);
+      const items = (data.data ?? []).map((entry: any) => ({
+        node: slim(entry.node, ["id", "title"]),
+        list_status: slim(entry.list_status ?? {}, ["status", "score", "num_episodes_watched"]),
+      }));
+      return { content: [{ type: "text", text: JSON.stringify({ data: items }, null, 2) }] };
     },
   );
 
@@ -177,8 +213,12 @@ export function registerMalTools(server: McpServer, client: MalClient) {
       }
       const params: Record<string, string> = { sort, limit: String(limit), fields: "list_status," + MANGA_FIELDS };
       if (status) params.status = status;
-      const data = await client.get("/users/@me/mangalist", params, true);
-      return { content: [{ type: "text", text: JSON.stringify(data, null, 2) }] };
+      const data: any = await client.get("/users/@me/mangalist", params, true);
+      const items = (data.data ?? []).map((entry: any) => ({
+        node: slim(entry.node, ["id", "title"]),
+        list_status: slim(entry.list_status ?? {}, ["status", "score", "num_chapters_read", "num_volumes_read"]),
+      }));
+      return { content: [{ type: "text", text: JSON.stringify({ data: items }, null, 2) }] };
     },
   );
 

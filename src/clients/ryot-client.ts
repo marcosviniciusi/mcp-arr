@@ -25,6 +25,7 @@ export class RyotClient {
         Accept: "application/json",
       },
       body: JSON.stringify({ query: gql, variables }),
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!res.ok) {
@@ -47,4 +48,31 @@ export class RyotClient {
   ): Promise<T> {
     return this.query<T>(gql, variables);
   }
+}
+
+/**
+ * Factory: create Ryot clients for each auth level (user).
+ */
+export interface RyotConfig {
+  url: string;
+  api_token?: string;
+  users?: Record<string, { api_token: string }>;
+}
+
+export function createRyotClients(config: RyotConfig): Map<string, RyotClient> {
+  const clients = new Map<string, RyotClient>();
+
+  // Admin client
+  if (config.api_token) {
+    clients.set("admin", new RyotClient(config.url, config.api_token));
+  }
+
+  // User-level clients
+  if (config.users) {
+    for (const [level, creds] of Object.entries(config.users)) {
+      clients.set(level, new RyotClient(config.url, creds.api_token));
+    }
+  }
+
+  return clients;
 }
