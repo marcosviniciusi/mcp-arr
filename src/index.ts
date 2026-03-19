@@ -25,6 +25,7 @@ import {
   type JellyseerrConfig,
 } from "./clients/jellyseerr-client.js";
 import { TmdbClient } from "./clients/tmdb-client.js";
+import { TvdbClient } from "./clients/tvdb-client.js";
 import { OmdbClient } from "./clients/omdb-client.js";
 import { MalClient } from "./clients/mal-client.js";
 import { RyotClient, createRyotClients, type RyotConfig } from "./clients/ryot-client.js";
@@ -50,6 +51,7 @@ import { registerMalTools } from "./tools/mal.js";
 import { registerRyotTools } from "./tools/ryot.js";
 import { registerSeerrTools } from "./tools/seerr.js";
 import { registerOmdbTools } from "./tools/omdb.js";
+import { registerTvdbTools } from "./tools/tvdb.js";
 
 const VERSION = "3.1.0";
 
@@ -267,6 +269,12 @@ function registerAllTools(
         if (svc.url && ryotClients) {
           const level = ryotAuthLevel || "admin";
           registerRyotTools(server, () => getRyotClient(level));
+        }
+        break;
+
+      case "tvdb":
+        if (svc.api_key) {
+          registerTvdbTools(server, new TvdbClient(svc.api_key));
         }
         break;
     }

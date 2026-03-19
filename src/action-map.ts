@@ -203,6 +203,11 @@ export const ACTION_MAP: Record<string, Record<string, string[]>> = {
     read: ["search", "get_by_id", "get_by_title"],
   },
 
+  tvdb: {
+    read: ["get_series", "get_series_extended", "get_series_episodes", "get_movie", "get_description"],
+    search: ["search"],
+  },
+
   jellyfin: {
     read: [
       "get_system_info", "get_libraries", "search", "get_item",
@@ -218,7 +223,7 @@ export const ACTION_MAP: Record<string, Record<string, string[]>> = {
 const SERVICE_TYPES = [
   "sonarr", "radarr", "bazarr", "lidarr", "whisparr", "autobrr",
   "jellyfin", "emby", "prowlarr", "jellyseerr", "seerr",
-  "qbittorrent", "nzbget", "tmdb", "mal", "ryot", "omdb",
+  "qbittorrent", "nzbget", "tmdb", "mal", "ryot", "omdb", "tvdb",
 ];
 
 /**
