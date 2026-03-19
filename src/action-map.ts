@@ -200,7 +200,8 @@ export const ACTION_MAP: Record<string, Record<string, string[]>> = {
   },
 
   omdb: {
-    read: ["search", "get_by_id", "get_by_title"],
+    read: ["get_by_id", "get_ratings"],
+    search: ["search"],
   },
 
   tvdb: {
