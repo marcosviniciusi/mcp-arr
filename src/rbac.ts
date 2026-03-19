@@ -17,7 +17,7 @@ export interface AppPermission {
   actions: string[];
   /** Blocklist — overrides allowlist. Supports same patterns as actions. */
   deny_actions?: string[];
-  /** Jellyseerr/Seerr-specific: which auth context to use (admin | poweruser | requester) */
+  /** Jellyseerr-specific: which auth context to use (admin | poweruser | requester) */
   auth_level?: string;
 }
 
@@ -134,7 +134,7 @@ export function hasPermission(entry: TokenEntry, app: string, action: string): b
 }
 
 /**
- * Get the auth_level for a specific app (Jellyseerr/Seerr).
+ * Get the auth_level for a specific app (e.g. Jellyseerr, Ryot).
  */
 export function getAuthLevel(entry: TokenEntry, app: string): string | undefined {
   return entry.permissions[app]?.auth_level;

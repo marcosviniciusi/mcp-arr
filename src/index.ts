@@ -29,11 +29,6 @@ import { TvdbClient } from "./clients/tvdb-client.js";
 import { OmdbClient } from "./clients/omdb-client.js";
 import { MalClient } from "./clients/mal-client.js";
 import { RyotClient, createRyotClients, type RyotConfig } from "./clients/ryot-client.js";
-import {
-  createSeerrClients,
-  type SeerrClient,
-  type SeerrConfig,
-} from "./clients/seerr-client.js";
 import { registerSonarrTools } from "./tools/sonarr.js";
 import { registerRadarrTools } from "./tools/radarr.js";
 import { registerProwlarrTools } from "./tools/prowlarr.js";
@@ -49,7 +44,6 @@ import { registerAutobrrTools } from "./tools/autobrr.js";
 import { registerTmdbTools } from "./tools/tmdb.js";
 import { registerMalTools } from "./tools/mal.js";
 import { registerRyotTools } from "./tools/ryot.js";
-import { registerSeerrTools } from "./tools/seerr.js";
 import { registerOmdbTools } from "./tools/omdb.js";
 import { registerTvdbTools } from "./tools/tvdb.js";
 
@@ -115,19 +109,6 @@ function getJellyseerrClient(authLevel: string): JellyseerrClient {
   return client;
 }
 
-// ─── Seerr client registry (per auth_level) ─────────────────────
-
-let seerrClients: Map<string, SeerrClient> | null = null;
-
-function getSeerrClient(authLevel: string): SeerrClient {
-  if (!seerrClients) throw new Error("Seerr not configured");
-  const client = seerrClients.get(authLevel);
-  if (!client) {
-    return seerrClients.get("admin") ?? seerrClients.values().next().value!;
-  }
-  return client;
-}
-
 // ─── Ryot client registry (per auth_level) ──────────────────────
 
 let ryotClients: Map<string, RyotClient> | null = null;
@@ -151,7 +132,6 @@ function registerAllTools(
   server: McpServer,
   services: Record<string, ServiceConfig>,
   jellyseerrAuthLevel?: string,
-  seerrAuthLevel?: string,
   ryotAuthLevel?: string,
 ): void {
   for (const [key, svc] of Object.entries(services)) {
@@ -238,13 +218,6 @@ function registerAllTools(
         }
         break;
 
-      case "seerr":
-        if (svc.url && seerrClients) {
-          const level = seerrAuthLevel || "admin";
-          registerSeerrTools(server, () => getSeerrClient(level));
-        }
-        break;
-
       // ── External APIs ──
       case "tmdb":
         if (svc.api_key) {
@@ -299,9 +272,6 @@ function initServiceClients(services: Record<string, ServiceConfig>): void {
   if (services.jellyseerr?.url) {
     jellyseerrClients = createJellyseerrClients(services.jellyseerr as JellyseerrConfig);
   }
-  if (services.seerr?.url) {
-    seerrClients = createSeerrClients(services.seerr as SeerrConfig);
-  }
   if (services.ryot?.url) {
     ryotClients = createRyotClients(services.ryot as RyotConfig);
   }
@@ -327,7 +297,7 @@ async function startStdio(config: AppConfig) {
   const server = new McpServer({ name: "midia-mcp", version: VERSION });
 
   initServiceClients(services);
-  registerAllTools(server, services, "admin", "admin", "admin");
+  registerAllTools(server, services, "admin", "admin");
   logEnabledServices(services);
 
   const transport = new StdioServerTransport();
@@ -384,7 +354,6 @@ async function startSSE(config: AppConfig) {
     const ip = req.ip ?? req.socket.remoteAddress ?? "unknown";
     const transport = new SSEServerTransport("/messages", res);
     const jellyseerrLevel = getJellyseerrAuthLevel(tokenEntry);
-    const seerrLevel = getAuthLevel(tokenEntry, "seerr");
     const ryotLevel = getAuthLevel(tokenEntry, "ryot");
 
     const context: SessionContext = {
@@ -395,7 +364,7 @@ async function startSSE(config: AppConfig) {
 
     const server = createGuardedServer(() => {
       const s = new McpServer({ name: "midia-mcp", version: VERSION });
-      registerAllTools(s, services, jellyseerrLevel, seerrLevel, ryotLevel);
+      registerAllTools(s, services, jellyseerrLevel, ryotLevel);
       return s;
     }, context);
 
@@ -506,7 +475,6 @@ async function startStreamableHTTP(config: AppConfig) {
 
     // New session
     const jellyseerrLevel = getJellyseerrAuthLevel(tokenEntry);
-    const seerrLevel = getAuthLevel(tokenEntry, "seerr");
     const ryotLevel = getAuthLevel(tokenEntry, "ryot");
 
     const transport = new StreamableHTTPServerTransport({
@@ -545,7 +513,7 @@ async function startStreamableHTTP(config: AppConfig) {
 
     const server = createGuardedServer(() => {
       const s = new McpServer({ name: "midia-mcp", version: VERSION });
-      registerAllTools(s, services, jellyseerrLevel, seerrLevel, ryotLevel);
+      registerAllTools(s, services, jellyseerrLevel, ryotLevel);
       return s;
     }, context);
 

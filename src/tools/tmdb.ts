@@ -19,6 +19,10 @@ function resolveGenres(ids: number[]): string[] {
   return ids.map(id => GENRE_MAP[id] ?? String(id));
 }
 
+function isAnime(item: any): boolean {
+  return item.original_language === "ja" && Array.isArray(item.genre_ids) && item.genre_ids.includes(16);
+}
+
 function slimTmdbResult(item: any): any {
   const mt = item.media_type;
   if (mt === "person" || item.known_for_department) {
@@ -28,12 +32,18 @@ function slimTmdbResult(item: any): any {
     const s = slim(item, ["id", "name", "first_air_date", "vote_average", "vote_count", "original_language", "popularity"]);
     if (Array.isArray(item.genre_ids)) s.genres = resolveGenres(item.genre_ids);
     if (item.media_type) s.media_type = "tv";
+    s.is_anime = isAnime(item);
+    if (s.is_anime) s.add_to = "sonarr_animes";
+    else s.add_to = "sonarr";
     return s;
   }
   // default: movie
   const s = slim(item, ["id", "title", "release_date", "vote_average", "vote_count", "original_language", "popularity"]);
   if (Array.isArray(item.genre_ids)) s.genres = resolveGenres(item.genre_ids);
   if (item.media_type) s.media_type = "movie";
+  s.is_anime = isAnime(item);
+  if (s.is_anime) s.add_to = "radarr_animes";
+  else s.add_to = "radarr";
   return s;
 }
 

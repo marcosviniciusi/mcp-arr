@@ -141,16 +141,6 @@ export const ACTION_MAP: Record<string, Record<string, string[]>> = {
     manage: ["create_collection", "delete_from_list", "import_from_source"],
   },
 
-  seerr: {
-    read: [
-      "search", "get_media", "get_media_by_id", "get_requests",
-      "get_request_by_id", "get_status",
-    ],
-    request: ["request_movie", "request_tv"],
-    manage: ["approve_request", "deny_request", "delete_request"],
-    admin: ["get_users", "get_user_by_id", "get_settings"],
-  },
-
   bazarr: {
     read: [
       "get_series", "get_series_by_id", "get_episodes", "get_movies",
@@ -223,7 +213,7 @@ export const ACTION_MAP: Record<string, Record<string, string[]>> = {
 /** Known service type prefixes for multi-instance support. */
 const SERVICE_TYPES = [
   "sonarr", "radarr", "bazarr", "lidarr", "whisparr", "autobrr",
-  "jellyfin", "emby", "prowlarr", "jellyseerr", "seerr",
+  "jellyfin", "emby", "prowlarr", "jellyseerr",
   "qbittorrent", "nzbget", "tmdb", "mal", "ryot", "omdb", "tvdb",
 ];
 
