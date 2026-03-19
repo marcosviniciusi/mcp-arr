@@ -412,6 +412,157 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
     },
   );
 
+  // ── Find by person (actor/director) ───────────────────────────
+
+  server.tool(
+    "tmdb_find_by_person",
+    "Find movies or TV shows by actor or director. 1 call. Use tmdb_search_person first to get the person ID.",
+    {
+      mediaType: z.enum(["tv", "movie"]).describe("Type to discover"),
+      personId: z.number().describe("TMDB person ID (use tmdb_search_person to find it)"),
+      role: z.enum(["cast", "crew", "any"]).optional().default("any").describe("cast=actor, crew=director/writer, any=both"),
+      vote_average_gte: z.number().optional().default(6).describe("Minimum rating"),
+      vote_count_gte: z.number().optional().default(50).describe("Minimum votes"),
+      limit: z.number().optional().default(10),
+      language: z.string().optional().default("pt-BR"),
+    },
+    async ({ mediaType, personId, role, vote_average_gte, vote_count_gte, limit, language }) => {
+      // Get person info
+      const person: any = await client.get(`/person/${personId}`, { language });
+
+      const params: Record<string, string> = {
+        sort_by: "vote_average.desc",
+        "vote_average.gte": String(vote_average_gte),
+        "vote_count.gte": String(vote_count_gte),
+        language,
+      };
+      if (role === "cast") params.with_cast = String(personId);
+      else if (role === "crew") params.with_crew = String(personId);
+      else { params.with_cast = String(personId); } // default to cast for actors
+
+      const endpoint = mediaType === "tv" ? "/discover/tv" : "/discover/movie";
+      const data: any = await client.get(endpoint, params);
+
+      // If "any" role and cast returned few results, also try crew
+      let items = (data.results ?? []);
+      if (role === "any" && items.length < limit) {
+        const params2 = { ...params };
+        delete params2.with_cast;
+        params2.with_crew = String(personId);
+        const data2: any = await client.get(endpoint, params2);
+        const existingIds = new Set(items.map((r: any) => r.id));
+        items = [...items, ...(data2.results ?? []).filter((r: any) => !existingIds.has(r.id))];
+      }
+
+      const results = items.slice(0, limit).map(slimTmdbResult);
+      return { content: [{ type: "text", text: JSON.stringify({
+        person: { id: personId, name: person.name, known_for: person.known_for_department },
+        total_found: items.length,
+        results,
+      }, null, 2) }] };
+    },
+  );
+
+  // ── Find by streaming provider ────────────────────────────────
+
+  const PROVIDER_MAP: Record<string, number> = {
+    netflix: 8, prime: 119, "amazon prime": 119, "disney+": 337, disney: 337,
+    hbo: 384, "hbo max": 384, max: 384, "apple tv": 350, "apple tv+": 350,
+    paramount: 531, "paramount+": 531, globoplay: 307, crunchyroll: 283,
+    mubi: 11, "star+": 619, starz: 43,
+  };
+
+  server.tool(
+    "tmdb_find_by_provider",
+    "Find movies or TV shows available on a streaming platform (Netflix, Prime, Disney+, HBO, Apple TV+, Globoplay, Crunchyroll, etc). 1 call.",
+    {
+      mediaType: z.enum(["tv", "movie"]).describe("Type to discover"),
+      provider: z.string().describe("Streaming name (netflix, prime, disney+, hbo, apple tv+, globoplay, crunchyroll, paramount+, mubi)"),
+      region: z.string().optional().default("BR").describe("Watch region ISO 3166-1 (BR, US, GB, DE, FR, JP)"),
+      with_genres: z.string().optional().describe("Genre IDs comma-separated (80=Crime, 18=Drama, 878=Sci-Fi, 16=Animation)"),
+      vote_average_gte: z.number().optional().default(7).describe("Minimum rating"),
+      vote_count_gte: z.number().optional().default(100).describe("Minimum votes"),
+      sort_by: z.string().optional().default("vote_average.desc"),
+      limit: z.number().optional().default(10),
+      language: z.string().optional().default("pt-BR"),
+    },
+    async ({ mediaType, provider, region, with_genres, vote_average_gte, vote_count_gte, sort_by, limit, language }) => {
+      const providerId = PROVIDER_MAP[provider.toLowerCase()] ?? parseInt(provider);
+      if (!providerId || isNaN(providerId)) {
+        return { content: [{ type: "text", text: JSON.stringify({
+          error: `Unknown provider "${provider}". Known: ${Object.keys(PROVIDER_MAP).join(", ")}`,
+        }, null, 2) }] };
+      }
+
+      const params: Record<string, string> = {
+        with_watch_providers: String(providerId),
+        watch_region: region,
+        sort_by,
+        "vote_average.gte": String(vote_average_gte),
+        "vote_count.gte": String(vote_count_gte),
+        language,
+      };
+      if (with_genres) params.with_genres = with_genres;
+
+      const endpoint = mediaType === "tv" ? "/discover/tv" : "/discover/movie";
+      const data: any = await client.get(endpoint, params);
+      const results = (data.results ?? []).slice(0, limit).map(slimTmdbResult);
+
+      return { content: [{ type: "text", text: JSON.stringify({
+        provider: { name: provider, id: providerId, region },
+        total_found: data.total_results ?? 0,
+        results,
+      }, null, 2) }] };
+    },
+  );
+
+  // ── Find by company/studio ────────────────────────────────────
+
+  server.tool(
+    "tmdb_find_by_studio",
+    "Find movies or TV shows by production studio/company (A24, BBC, Studio Ghibli, etc). Use tmdb_search_company to find company ID, or use common IDs: A24=41077, BBC=3324, HBO=3268, Netflix=213, Studio Ghibli=10342, Marvel=420, DC=9993, Pixar=3, Toei=5542.",
+    {
+      mediaType: z.enum(["tv", "movie"]).describe("Type to discover"),
+      companyId: z.number().describe("TMDB company ID"),
+      vote_average_gte: z.number().optional().default(7),
+      vote_count_gte: z.number().optional().default(50),
+      sort_by: z.string().optional().default("vote_average.desc"),
+      limit: z.number().optional().default(10),
+      language: z.string().optional().default("pt-BR"),
+    },
+    async ({ mediaType, companyId, vote_average_gte, vote_count_gte, sort_by, limit, language }) => {
+      const params: Record<string, string> = {
+        with_companies: String(companyId),
+        sort_by,
+        "vote_average.gte": String(vote_average_gte),
+        "vote_count.gte": String(vote_count_gte),
+        language,
+      };
+
+      const endpoint = mediaType === "tv" ? "/discover/tv" : "/discover/movie";
+      const data: any = await client.get(endpoint, params);
+      const results = (data.results ?? []).slice(0, limit).map(slimTmdbResult);
+
+      return { content: [{ type: "text", text: JSON.stringify({
+        companyId,
+        total_found: data.total_results ?? 0,
+        results,
+      }, null, 2) }] };
+    },
+  );
+
+  // Helper tool: search companies
+  server.tool(
+    "tmdb_search_company",
+    "Search TMDB company/studio IDs by name. Use to find companyId for tmdb_find_by_studio.",
+    { query: z.string().describe("Company name (e.g. A24, BBC, Studio Ghibli)") },
+    async ({ query }) => {
+      const data: any = await client.get("/search/company", { query });
+      const results = (data.results ?? []).slice(0, 10).map((c: any) => ({ id: c.id, name: c.name, origin_country: c.origin_country }));
+      return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
+    },
+  );
+
   // ── Description & Similar ────────────────────────────────────
 
   server.tool(
