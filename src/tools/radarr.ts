@@ -19,7 +19,7 @@ export function registerRadarrTools(server: McpServer, client: ArrClient, prefix
 
   server.tool(
     `${p}_get_movies`,
-    `List all movies in ${label}`,
+    `List movies in ${label} (top 25). Use search_movies to find a specific one by name.`,
     {},
     async () => {
       const data: any[] = await client.get("/api/v3/movie");

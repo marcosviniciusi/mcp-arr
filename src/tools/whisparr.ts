@@ -13,7 +13,7 @@ export function registerWhisparrTools(server: McpServer, client: ArrClient, pref
 
   server.tool(
     `${p}_get_movies`,
-    `List all movies in ${p} library`,
+    `List movies in ${p} (top 25). Use search_movies to find a specific one by name.`,
     {},
     async () => {
       const data: any[] = await client.get("/api/v3/movie");

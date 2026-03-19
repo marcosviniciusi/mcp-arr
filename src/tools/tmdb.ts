@@ -10,10 +10,14 @@ function slimTmdbResult(item: any): any {
     return slim(item, ["id", "name", "known_for_department"]);
   }
   if (mt === "tv" || item.first_air_date !== undefined) {
-    return slim(item, ["id", "name", "first_air_date", "vote_average", "original_language"]);
+    const s = slim(item, ["id", "name", "first_air_date", "vote_average", "original_language", "genre_ids", "popularity"]);
+    if (item.media_type) s.media_type = "tv";
+    return s;
   }
   // default: movie
-  return slim(item, ["id", "title", "release_date", "vote_average", "original_language"]);
+  const s = slim(item, ["id", "title", "release_date", "vote_average", "original_language", "genre_ids", "popularity"]);
+  if (item.media_type) s.media_type = "movie";
+  return s;
 }
 
 function slimResultsPage(data: any, limit = 10): any {
@@ -90,7 +94,7 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
 
   server.tool(
     "tmdb_get_movie_details",
-    "Get detailed information about a movie",
+    "Get details of ONE specific movie by TMDB ID (runtime, budget, revenue, genres). Do NOT call this in a loop — discover/search already return enough info.",
     {
       movieId: z.number().describe("TMDB movie ID"),
       language: z.string().optional().default("en-US"),
@@ -105,7 +109,7 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
 
   server.tool(
     "tmdb_get_tv_details",
-    "Get detailed information about a TV show",
+    "Get details of ONE specific TV show by TMDB ID (seasons count, episodes count, status, genres). Do NOT call this in a loop — discover/search already return enough info.",
     {
       tvId: z.number().describe("TMDB TV show ID"),
       language: z.string().optional().default("en-US"),
@@ -258,7 +262,7 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
 
   server.tool(
     "tmdb_discover_movies",
-    "Discover movies with advanced filters (genre, year, rating, etc.)",
+    "Discover movies by filters (genre, year, rating). Already returns title, vote_average, genre_ids, popularity — do NOT call get_movie_details for each result.",
     {
       page: z.number().optional().default(1),
       language: z.string().optional().default("en-US"),
@@ -283,7 +287,7 @@ export function registerTmdbTools(server: McpServer, client: TmdbClient) {
 
   server.tool(
     "tmdb_discover_tv",
-    "Discover TV shows with advanced filters",
+    "Discover TV shows by filters (genre, year, rating). Already returns name, vote_average, genre_ids, popularity — do NOT call get_tv_details for each result.",
     {
       page: z.number().optional().default(1),
       language: z.string().optional().default("en-US"),

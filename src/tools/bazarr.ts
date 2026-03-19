@@ -14,7 +14,7 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
 
   server.tool(
     `${p}_get_series`,
-    `List all series with subtitle status in ${p}`,
+    `List series with subtitle status in ${p} (top 25).`,
     {},
     async () => {
       const raw: any = await client.get("/api/series");
@@ -71,7 +71,7 @@ export function registerBazarrTools(server: McpServer, client: BazarrClient, pre
 
   server.tool(
     `${p}_get_movies`,
-    `List all movies with subtitle status in ${p}`,
+    `List movies with subtitle status in ${p} (top 25).`,
     {},
     async () => {
       const raw: any = await client.get("/api/movies");

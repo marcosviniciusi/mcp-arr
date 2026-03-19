@@ -16,7 +16,7 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
 
   server.tool(
     `${p}_get_artists`,
-    `List all artists in ${p} library`,
+    `List artists in ${p} (top 25). Use search_artists to find a specific one by name.`,
     {},
     async () => {
       const data: any[] = await client.get("/api/v1/artist");

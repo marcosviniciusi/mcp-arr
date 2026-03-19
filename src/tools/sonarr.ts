@@ -17,7 +17,7 @@ export function registerSonarrTools(server: McpServer, client: ArrClient, prefix
 
   server.tool(
     `${p}_get_series`,
-    `List all series in ${label}`,
+    `List series in ${label} (top 25). Use search_series to find a specific one by name.`,
     {},
     async () => {
       const data: any[] = await client.get("/api/v3/series");

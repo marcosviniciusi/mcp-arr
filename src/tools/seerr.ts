@@ -31,7 +31,7 @@ export function registerSeerrTools(server: McpServer, getClient: () => SeerrClie
 
   server.tool(
     `${p}_get_media`,
-    `List all media in ${label}`,
+    `List media in ${label} (paginated). Use seerr_search to find specific titles.`,
     {
       take: z.number().optional().default(20).describe("Number of results"),
       skip: z.number().optional().default(0).describe("Offset"),
