@@ -1,0 +1,23 @@
+services:
+  mcp-emby:
+    image: marcosviniciusi/mcp-emby:v4.3.0
+    container_name: mcp-emby
+    restart: unless-stopped
+    ports:
+      - "3008:3000"
+    environment:
+      - MIDIA_MCP_CONFIG=/etc/midia-mcp/config.yaml
+      - TRANSPORT=streamable-http
+    volumes:
+      - ./config.yaml:/etc/midia-mcp/config.yaml:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mcp-emby.rule=Host(`mcp-emby.example.com`)"
+      - "traefik.http.routers.mcp-emby.entrypoints=websecure"
+      - "traefik.http.routers.mcp-emby.tls.certresolver=letsencrypt"
+      - "traefik.http.services.mcp-emby.loadbalancer.server.port=3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

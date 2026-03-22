@@ -1,0 +1,23 @@
+services:
+  mcp-prowlarr:
+    image: marcosviniciusi/mcp-prowlarr:v4.3.0
+    container_name: mcp-prowlarr
+    restart: unless-stopped
+    ports:
+      - "3005:3000"
+    environment:
+      - MIDIA_MCP_CONFIG=/etc/midia-mcp/config.yaml
+      - TRANSPORT=streamable-http
+    volumes:
+      - ./config.yaml:/etc/midia-mcp/config.yaml:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mcp-prowlarr.rule=Host(`mcp-prowlarr.example.com`)"
+      - "traefik.http.routers.mcp-prowlarr.entrypoints=websecure"
+      - "traefik.http.routers.mcp-prowlarr.tls.certresolver=letsencrypt"
+      - "traefik.http.services.mcp-prowlarr.loadbalancer.server.port=3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

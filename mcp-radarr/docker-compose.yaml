@@ -1,0 +1,23 @@
+services:
+  mcp-radarr:
+    image: marcosviniciusi/mcp-radarr:v4.3.0
+    container_name: mcp-radarr
+    restart: unless-stopped
+    ports:
+      - "3002:3000"
+    environment:
+      - MIDIA_MCP_CONFIG=/etc/midia-mcp/config.yaml
+      - TRANSPORT=streamable-http
+    volumes:
+      - ./config.yaml:/etc/midia-mcp/config.yaml:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mcp-radarr.rule=Host(`mcp-radarr.example.com`)"
+      - "traefik.http.routers.mcp-radarr.entrypoints=websecure"
+      - "traefik.http.routers.mcp-radarr.tls.certresolver=letsencrypt"
+      - "traefik.http.services.mcp-radarr.loadbalancer.server.port=3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

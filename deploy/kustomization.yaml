@@ -3,13 +3,41 @@ kind: Kustomization
 
 namespace: mcp-arr
 
-commonLabels:
-  app.kubernetes.io/name: midia-mcp
-  app.kubernetes.io/part-of: mcp-arr
-
 resources:
   - namespace.yaml
   - configmap.yaml
-  - deployment.yaml
-  - service.yaml
   - sealedsecret-config.yaml
+  - mcp-sonarr/deployment.yaml
+  - mcp-sonarr/service.yaml
+  - mcp-radarr/deployment.yaml
+  - mcp-radarr/service.yaml
+  - mcp-tmdb/deployment.yaml
+  - mcp-tmdb/service.yaml
+  - mcp-omdb/deployment.yaml
+  - mcp-omdb/service.yaml
+  - mcp-prowlarr/deployment.yaml
+  - mcp-prowlarr/service.yaml
+  - mcp-autobrr/deployment.yaml
+  - mcp-autobrr/service.yaml
+  - mcp-bazarr/deployment.yaml
+  - mcp-bazarr/service.yaml
+  - mcp-emby/deployment.yaml
+  - mcp-emby/service.yaml
+  - mcp-jellyfin/deployment.yaml
+  - mcp-jellyfin/service.yaml
+  - mcp-mal/deployment.yaml
+  - mcp-mal/service.yaml
+  - mcp-ryot/deployment.yaml
+  - mcp-ryot/service.yaml
+  - mcp-lidarr/deployment.yaml
+  - mcp-lidarr/service.yaml
+  - mcp-whisparr/deployment.yaml
+  - mcp-whisparr/service.yaml
+  - mcp-tvdb/deployment.yaml
+  - mcp-tvdb/service.yaml
+  - mcp-jellyseerr/deployment.yaml
+  - mcp-jellyseerr/service.yaml
+  - mcp-qbittorrent/deployment.yaml
+  - mcp-qbittorrent/service.yaml
+  - mcp-nzbget/deployment.yaml
+  - mcp-nzbget/service.yaml

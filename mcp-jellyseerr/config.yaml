@@ -1,0 +1,14 @@
+transport: streamable-http
+host: "0.0.0.0"
+port: 3000
+
+services:
+  seerr:
+    url: "http://jellyseerr:5055"
+    api_key: "YOUR_JELLYSEERR_API_KEY_HERE"
+
+auth_tokens:
+  - token: "admin-GENERATE_WITH_openssl_rand_hex_32"
+    description: "Admin"
+    permissions:
+      seerr: { actions: ["*"] }

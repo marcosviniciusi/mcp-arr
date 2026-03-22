@@ -1,0 +1,23 @@
+transport: streamable-http
+host: "0.0.0.0"
+port: 3000
+
+services:
+  sonarr:
+    url: "http://sonarr:8989"
+    api_key: "YOUR_SONARR_API_KEY_HERE"
+    default_quality_profile_id: 6
+    default_root_folder: "/data/videos/series"
+
+  sonarr_animes:
+    url: "http://sonarr-animes:8989"
+    api_key: "YOUR_SONARR_ANIMES_API_KEY_HERE"
+    default_quality_profile_id: 6
+    default_root_folder: "/data/videos/animes-series"
+
+auth_tokens:
+  - token: "admin-GENERATE_WITH_openssl_rand_hex_32"
+    description: "Admin"
+    permissions:
+      sonarr: { actions: ["*"] }
+      sonarr_animes: { actions: ["*"] }

@@ -1,0 +1,23 @@
+services:
+  mcp-tmdb:
+    image: marcosviniciusi/mcp-tmdb:v4.3.0
+    container_name: mcp-tmdb
+    restart: unless-stopped
+    ports:
+      - "3003:3000"
+    environment:
+      - MIDIA_MCP_CONFIG=/etc/midia-mcp/config.yaml
+      - TRANSPORT=streamable-http
+    volumes:
+      - ./config.yaml:/etc/midia-mcp/config.yaml:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mcp-tmdb.rule=Host(`mcp-tmdb.example.com`)"
+      - "traefik.http.routers.mcp-tmdb.entrypoints=websecure"
+      - "traefik.http.routers.mcp-tmdb.tls.certresolver=letsencrypt"
+      - "traefik.http.services.mcp-tmdb.loadbalancer.server.port=3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

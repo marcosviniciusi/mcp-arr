@@ -1,0 +1,23 @@
+services:
+  mcp-bazarr:
+    image: marcosviniciusi/mcp-bazarr:v4.3.0
+    container_name: mcp-bazarr
+    restart: unless-stopped
+    ports:
+      - "3007:3000"
+    environment:
+      - MIDIA_MCP_CONFIG=/etc/midia-mcp/config.yaml
+      - TRANSPORT=streamable-http
+    volumes:
+      - ./config.yaml:/etc/midia-mcp/config.yaml:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mcp-bazarr.rule=Host(`mcp-bazarr.example.com`)"
+      - "traefik.http.routers.mcp-bazarr.entrypoints=websecure"
+      - "traefik.http.routers.mcp-bazarr.tls.certresolver=letsencrypt"
+      - "traefik.http.services.mcp-bazarr.loadbalancer.server.port=3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

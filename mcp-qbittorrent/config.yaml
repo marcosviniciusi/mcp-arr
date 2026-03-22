@@ -1,0 +1,15 @@
+transport: streamable-http
+host: "0.0.0.0"
+port: 3000
+
+services:
+  qbittorrent:
+    url: "http://qbittorrent:8080"
+    username: "YOUR_QBITTORRENT_USERNAME"
+    password: "YOUR_QBITTORRENT_PASSWORD"
+
+auth_tokens:
+  - token: "admin-GENERATE_WITH_openssl_rand_hex_32"
+    description: "Admin"
+    permissions:
+      qbittorrent: { actions: ["*"] }

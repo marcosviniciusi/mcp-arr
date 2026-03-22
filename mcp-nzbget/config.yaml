@@ -1,0 +1,15 @@
+transport: streamable-http
+host: "0.0.0.0"
+port: 3000
+
+services:
+  nzbget:
+    url: "http://nzbget:6789"
+    username: "YOUR_NZBGET_USERNAME"
+    password: "YOUR_NZBGET_PASSWORD"
+
+auth_tokens:
+  - token: "admin-GENERATE_WITH_openssl_rand_hex_32"
+    description: "Admin"
+    permissions:
+      nzbget: { actions: ["*"] }

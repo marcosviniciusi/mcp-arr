@@ -1,0 +1,23 @@
+transport: streamable-http
+host: "0.0.0.0"
+port: 3000
+
+services:
+  radarr:
+    url: "http://radarr:7878"
+    api_key: "YOUR_RADARR_API_KEY_HERE"
+    default_quality_profile_id: 6
+    default_root_folder: "/data/videos/movies"
+
+  radarr_animes:
+    url: "http://radarr-animes:7878"
+    api_key: "YOUR_RADARR_ANIMES_API_KEY_HERE"
+    default_quality_profile_id: 6
+    default_root_folder: "/data/videos/animes-movies"
+
+auth_tokens:
+  - token: "admin-GENERATE_WITH_openssl_rand_hex_32"
+    description: "Admin"
+    permissions:
+      radarr: { actions: ["*"] }
+      radarr_animes: { actions: ["*"] }
