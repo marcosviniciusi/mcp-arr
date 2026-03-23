@@ -28,6 +28,19 @@ export function registerWhisparrTools(server: McpServer, client: ArrClient, pref
   );
 
   server.tool(
+    `${p}_get_library_stats`,
+    `Get library statistics for ${p}: total movies, downloaded, and missing counts`,
+    {},
+    async () => {
+      const data: any[] = await client.get("/api/v3/movie");
+      const total = data.length;
+      const downloaded = data.filter((m: any) => m.hasFile).length;
+      const missing = data.filter((m: any) => m.monitored && !m.hasFile).length;
+      return ok({ total, downloaded, missing });
+    },
+  );
+
+  server.tool(
     `${p}_get_movie_by_id`,
     `Get details for a specific movie in ${p}`,
     { movieId: z.number().describe("Movie ID") },

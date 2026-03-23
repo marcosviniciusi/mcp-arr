@@ -30,6 +30,25 @@ export function registerLidarrTools(server: McpServer, client: ArrClient, prefix
   );
 
   server.tool(
+    `${p}_get_library_stats`,
+    `Get library statistics for ${p}: total artists, tracks downloaded, and missing counts`,
+    {},
+    async () => {
+      const data: any[] = await client.get("/api/v1/artist");
+      const totalArtists = data.length;
+      let totalTracks = 0, downloadedTracks = 0, missingTracks = 0;
+      for (const a of data) {
+        const st = a.statistics;
+        if (!st) continue;
+        totalTracks += st.trackCount ?? 0;
+        downloadedTracks += st.trackFileCount ?? 0;
+        missingTracks += (st.trackCount ?? 0) - (st.trackFileCount ?? 0);
+      }
+      return ok({ totalArtists, totalTracks, downloadedTracks, missingTracks });
+    },
+  );
+
+  server.tool(
     `${p}_get_artist_by_id`,
     `Get details for a specific artist in ${p}`,
     { artistId: z.number().describe("Artist ID") },

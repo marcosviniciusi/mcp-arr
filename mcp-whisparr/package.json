@@ -1,0 +1,41 @@
+{
+  "name": "mcp-whisparr",
+  "version": "4.4.0",
+  "description": "MCP server for Whisparr movie management",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-whisparr": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "keywords": [
+    "mcp",
+    "whisparr",
+    "movies",
+    "arr",
+    "media",
+    "streamable-http"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@opentelemetry/api-logs": "^0.213.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.213.0",
+    "@opentelemetry/resources": "^2.6.0",
+    "@opentelemetry/sdk-logs": "^0.213.0",
+    "@opentelemetry/semantic-conventions": "^1.40.0",
+    "express": "^5.2.1",
+    "js-yaml": "^4.1.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.15.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
